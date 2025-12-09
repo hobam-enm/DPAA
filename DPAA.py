@@ -12,7 +12,6 @@ from streamlit.components.v1 import iframe as st_iframe
 import gspread
 from google.oauth2.service_account import Credentials
 
-
 # 페이지 설정
 PAGE_TITLE = "드라마 사전분석 아카이브"
 PAGE_ICON = "🎬"
@@ -23,9 +22,10 @@ st.set_page_config(
     layout="wide",
 )
 
-GCP_SERVICE_ACCOUNT = dict(st.secrets["gcp_service_account"])  
+# --- Secrets 읽기 ---
+GCP_SERVICE_ACCOUNT = dict(st.secrets["gcp_service_account"])  # 섹션 전체를 dict로
 ARCHIVE_SHEET_ID = st.secrets.get("ARCHIVE_SHEET_ID", "")
-ARCHIVE_SHEET_NAME = st.secrets.get("ARCHIVE_SHEET_NAME", "ac")
+ARCHIVE_SHEET_NAME = st.secrets.get("ARCHIVE_SHEET_NAME", "아카이브")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
@@ -184,18 +184,36 @@ def load_archive_df() -> pd.DataFrame:
 
     df = pd.DataFrame(records)
 
+    # --- DEBUG: 원본 헤더 & 행 수 ---
+    st.sidebar.write("DEBUG raw_cols:", list(df.columns))
+    st.sidebar.write("DEBUG raw_rows:", len(df))
+
     # 컬럼명 매핑 (실제 한글 컬럼명과 맞춰서 필요 시 수정)
     rename_map = {
+        # IP명
         "IP명": "ip_name",
         "IP": "ip_name",
+
+        # 프레젠테이션 URL
         "프레젠테이션주소": "pres_url",
+        "프레젠테이션 주소": "pres_url",
         "프레젠테이션 URL": "pres_url",
         "프레젠테이션": "pres_url",
+
+        # 장표 범위
         "장표범위": "slide_range",
+        "장표 범위": "slide_range",
         "노출장표": "slide_range",
+        "노출 장표": "slide_range",
+
+        # 해시태그
         "해시태그": "hashtags",
+
+        # 포스터 이미지 URL
         "포스터이미지URL": "poster_url",
+        "포스터 이미지 URL": "poster_url",
         "포스터URL": "poster_url",
+        "포스터 URL": "poster_url",
     }
 
     for k, v in rename_map.items():
@@ -219,6 +237,13 @@ def load_archive_df() -> pd.DataFrame:
 
     # 빈 IP 제거
     df = df[df["ip_name"] != ""].reset_index(drop=True)
+
+    # --- DEBUG: 정리 후 컬럼/샘플 ---
+    st.sidebar.write("DEBUG norm_cols:", list(df.columns))
+    st.sidebar.write("DEBUG norm_rows:", len(df))
+    if not df.empty:
+        st.sidebar.write("DEBUG sample_row0:", df.iloc[0].to_dict())
+
     return df
 
 # endregion
@@ -342,10 +367,16 @@ def select_ip(ip_name: str):
 # endregion
 
 
-# region [5. 사이드바 UI - 검색 & 필터]
+# region [5. 사이드바 UI - 검색 / 필터 + 디버그]
 
 def render_sidebar(df: pd.DataFrame):
     st.sidebar.markdown("### 🔍 검색 / 필터")
+
+    # --- DEBUG: Secrets 상태 ---
+    st.sidebar.write("DEBUG secrets:",
+                     bool(GCP_SERVICE_ACCOUNT),
+                     ARCHIVE_SHEET_ID,
+                     ARCHIVE_SHEET_NAME)
 
     # 키워드 검색
     keyword = st.sidebar.text_input(
@@ -401,13 +432,11 @@ def render_main_layout(df: pd.DataFrame, filtered_df: pd.DataFrame):
                 slide_range = row.get("slide_range", "")
 
                 # 카드 HTML
-                poster_html = ""
                 if poster_url:
                     poster_html = (
                         f'<img class="drama-poster" src="{poster_url}" alt="{ip_name} 포스터" />'
                     )
                 else:
-                    # 포스터 없는 경우 Placeholder 박스
                     poster_html = (
                         '<div class="drama-poster" style="display:flex;align-items:center;'
                         'justify-content:center;font-size:10px;color:#555;background:#181818;">NO IMAGE</div>'
@@ -450,6 +479,8 @@ def render_main_layout(df: pd.DataFrame, filtered_df: pd.DataFrame):
         st.markdown("#### 📊 사전분석 리포트 뷰어")
 
         selected_ip = st.session_state.get("selected_ip")
+        st.sidebar.write("DEBUG selected_ip:", selected_ip)  # DEBUG
+
         if not selected_ip:
             if df.empty:
                 st.info("등록된 드라마가 없습니다. Google Sheets에 데이터를 추가해 주세요.")
@@ -469,6 +500,10 @@ def render_main_layout(df: pd.DataFrame, filtered_df: pd.DataFrame):
         pres_url = row.get("pres_url", "")
         slide_range = row.get("slide_range", "")
         hashtags_list = row.get("hashtags_list", [])
+
+        # --- DEBUG: 해당 IP의 URL / range ---
+        st.sidebar.write("DEBUG current_pres_url:", pres_url)
+        st.sidebar.write("DEBUG current_slide_range:", slide_range)
 
         # 메타 정보 영역
         tags_html = " ".join(
@@ -493,6 +528,8 @@ def render_main_layout(df: pd.DataFrame, filtered_df: pd.DataFrame):
 
         # Google Slides 임베딩
         embed_url = build_embed_url(pres_url)
+        st.sidebar.write("DEBUG embed_url:", embed_url)  # DEBUG
+
         if not embed_url:
             st.warning("Google 프레젠테이션 URL 형식이 올바르지 않습니다. (B열 URL을 확인해 주세요)")
         else:
@@ -505,6 +542,10 @@ def render_main_layout(df: pd.DataFrame, filtered_df: pd.DataFrame):
 
 def main():
     df = load_archive_df()
+
+    # --- DEBUG: 전체 DF 상태 ---
+    st.sidebar.write("DEBUG df_shape:", df.shape)
+
     keyword, selected_tags = render_sidebar(df)
 
     filtered_df = filter_archive(
@@ -512,6 +553,8 @@ def main():
         keyword=keyword,
         selected_tags=selected_tags,
     )
+
+    st.sidebar.write("DEBUG filtered_shape:", filtered_df.shape)  # DEBUG
 
     ensure_session_selected_ip(filtered_df)
     render_main_layout(df, filtered_df)
@@ -521,4 +564,3 @@ if __name__ == "__main__":
     main()
 
 # endregion
-
