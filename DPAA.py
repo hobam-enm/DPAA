@@ -1,200 +1,545 @@
-import streamlit as st
+# -*- coding: utf-8 -*-
+# 🎬 드라마 사전분석 아카이브 (Streamlit + 공개 Google Sheets CSV + Google Slides Embed)
+
+# region [1. Imports & 기본 설정]
+import re
+from typing import List, Optional
+
+from urllib.parse import urlparse, parse_qs
+
 import pandas as pd
-import streamlit.components.v1 as components
+import streamlit as st
+from streamlit.components.v1 import iframe as st_iframe
 
-# region [설정 및 스타일] ====================================================================
-def setup_page():
-    st.set_page_config(
-        page_title="드라마 사전분석 아카이브",
-        page_icon="🎬",
-        layout="wide",
-        initial_sidebar_state="collapsed"
+# 페이지 설정
+PAGE_TITLE = "드라마 사전분석 아카이브"
+PAGE_ICON = "🎬"
+
+st.set_page_config(
+    page_title=PAGE_TITLE,
+    page_icon=PAGE_ICON,
+    layout="wide",
+)
+
+# 시크릿에서 관리시트 URL 읽기
+ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
+
+# endregion
+
+
+# region [2. 스타일 (CSS) 정의]
+CUSTOM_CSS = """
+<style>
+/* 전체 배경 / 폰트 */
+html, body, [class*="css"]  {
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+                 "Noto Sans KR", "Segoe UI", sans-serif;
+}
+
+/* 메인 타이틀 */
+.main-title {
+    font-size: 32px;
+    font-weight: 800;
+    background: linear-gradient(90deg, #ff4b4b, #ff9f43);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.3rem;
+}
+
+/* 서브타이틀 */
+.subtitle {
+    color: #888;
+    font-size: 14px;
+    margin-bottom: 1.5rem;
+}
+
+/* 카드 컨테이너 */
+.drama-card {
+    border-radius: 16px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    background: #111111;
+    border: 1px solid #262626;
+    display: flex;
+    gap: 10px;
+    transition: all 0.18s ease-out;
+}
+
+.drama-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    border-color: #ff6b6b;
+}
+
+/* 포스터 이미지 */
+.drama-poster {
+    width: 70px;
+    height: 100px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 1px solid #333;
+}
+
+/* 카드 텍스트 */
+.drama-meta {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    flex: 1;
+}
+
+.drama-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 0.2rem;
+}
+
+.drama-subtitle {
+    font-size: 12px;
+    color: #bbbbbb;
+}
+
+/* 해시태그 뱃지 */
+.tag-badge {
+    display: inline-block;
+    padding: 3px 7px;
+    margin: 2px 4px 0 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 11px;
+    color: #ddd;
+}
+
+/* 버튼 커스터마이징 (카드 안 "리포트 열기") */
+.stButton>button {
+    width: 100%;
+    border-radius: 999px;
+    border: 1px solid #ff6b6b;
+    background: linear-gradient(90deg, #ff6b6b, #ff9f43);
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 0;
+    margin-top: 4px;
+}
+
+/* 선택된 IP 하이라이트 */
+.selected-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #ff9f43;
+}
+</style>
+"""
+
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+# endregion
+
+
+# region [3. Google Sheets 공개 CSV → DataFrame 로딩]
+
+def build_csv_url_from_sheet_url(sheet_url: str) -> Optional[str]:
+    """
+    전체 공개된 Google Sheets URL에서 CSV export URL 생성.
+    예) 
+      입력: https://docs.google.com/spreadsheets/d/{ID}/edit?gid=0#gid=0
+      출력: https://docs.google.com/spreadsheets/d/{ID}/export?format=csv&gid=0
+    """
+    if not isinstance(sheet_url, str) or sheet_url.strip() == "":
+        return None
+
+    m = re.search(r"/spreadsheets/d/([^/]+)/", sheet_url)
+    if not m:
+        return None
+
+    sheet_id = m.group(1)
+
+    parsed = urlparse(sheet_url)
+    qs = parse_qs(parsed.query)
+    gid = qs.get("gid", ["0"])[0]  # 기본 탭은 보통 gid=0
+
+    csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+    return csv_url
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_archive_df() -> pd.DataFrame:
+    """
+    전체 공개된 Google Sheets를 CSV로 읽어와서 DataFrame으로 반환.
+
+    기대 컬럼 (1행은 헤더, 2행부터 데이터):
+      - IP명
+      - 프레젠테이션 주소
+      - 노출 장표
+      - 해시태그
+      - 포스터이미지URL
+    """
+    csv_url = build_csv_url_from_sheet_url(ARCHIVE_SHEET_URL)
+
+    if not csv_url:
+        # 시크릿 설정 안 되어 있을 때 최소 동작용 더미
+        df_dummy = pd.DataFrame(
+            [
+                {
+                    "IP명": "예시 드라마",
+                    "프레젠테이션 주소": "https://docs.google.com/presentation/d/EXAMPLE_ID/edit",
+                    "노출 장표": "1-10",
+                    "해시태그": "#로맨스 #스릴러",
+                    "포스터이미지URL": "",
+                }
+            ]
+        )
+        df_dummy = normalize_archive_df(df_dummy)
+        return df_dummy
+
+    df_raw = pd.read_csv(csv_url)
+    df = normalize_archive_df(df_raw)
+    return df
+
+
+def normalize_archive_df(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    시트에서 읽어온 원본 DF를 앱에서 쓰는 표준 형태로 정리.
+    표준 컬럼:
+      - ip_name
+      - pres_url
+      - slide_range
+      - hashtags
+      - poster_url
+      - hashtags_list (파싱된 해시태그 리스트)
+    """
+    # 컬럼명 매핑
+    rename_map = {
+        # IP명
+        "IP명": "ip_name",
+        "IP": "ip_name",
+
+        # 프레젠테이션 URL
+        "프레젠테이션주소": "pres_url",
+        "프레젠테이션 주소": "pres_url",
+        "프레젠테이션 URL": "pres_url",
+        "프레젠테이션": "pres_url",
+
+        # 장표 범위
+        "장표범위": "slide_range",
+        "장표 범위": "slide_range",
+        "노출 장표": "slide_range",
+        "노출장표": "slide_range",
+
+        # 해시태그
+        "해시태그": "hashtags",
+
+        # 포스터 이미지 URL
+        "포스터이미지URL": "poster_url",
+        "포스터 이미지 URL": "poster_url",
+        "포스터URL": "poster_url",
+        "포스터 URL": "poster_url",
+    }
+
+    for k, v in rename_map.items():
+        if k in df.columns and v not in df.columns:
+            df = df.rename(columns={k: v})
+
+    # 필수 컬럼 기본값 처리
+    for col in ["ip_name", "pres_url", "slide_range", "hashtags", "poster_url"]:
+        if col not in df.columns:
+            df[col] = ""
+
+    # 문자열 변환 & strip
+    df["ip_name"] = df["ip_name"].astype(str).str.strip()
+    df["pres_url"] = df["pres_url"].astype(str).str.strip()
+    df["slide_range"] = df["slide_range"].astype(str).str.strip()
+    df["hashtags"] = df["hashtags"].astype(str).str.strip()
+    df["poster_url"] = df["poster_url"].astype(str).str.strip()
+
+    # 해시태그 파싱
+    df["hashtags_list"] = df["hashtags"].apply(parse_hashtags)
+
+    # 빈 IP 제거
+    df = df[df["ip_name"] != ""].reset_index(drop=True)
+    return df
+
+# endregion
+
+
+# region [4. 헬퍼 함수들]
+
+def parse_hashtags(tag_str: str) -> List[str]:
+    """
+    '#스릴러 #복수 #로맨스' → ['#스릴러', '#복수', '#로맨스']
+    '#'가 빠진 텍스트도 자동으로 '#' 붙여서 처리.
+    """
+    if not isinstance(tag_str, str) or tag_str.strip() == "":
+        return []
+
+    raw_tokens = re.split(r"\s+", tag_str.strip())
+    tokens = []
+    for t in raw_tokens:
+        if t == "":
+            continue
+        if not t.startswith("#"):
+            t = "#" + t
+        tokens.append(t)
+    return sorted(set(tokens), key=tokens.index)
+
+
+def collect_all_hashtags(df: pd.DataFrame) -> List[str]:
+    tags = []
+    for row_tags in df.get("hashtags_list", []):
+        if not isinstance(row_tags, list):
+            continue
+        tags.extend(row_tags)
+    return sorted(set(tags))
+
+
+def build_embed_url(pres_url: str) -> Optional[str]:
+    """
+    Google Slides 편집 URL → embed URL로 변환.
+    예)
+      입력: https://docs.google.com/presentation/d/FILE_ID/edit?slide=...
+      출력: https://docs.google.com/presentation/d/FILE_ID/embed?start=false&loop=false&delayms=3000
+    """
+    if not isinstance(pres_url, str) or "docs.google.com/presentation" not in pres_url:
+        return None
+
+    m = re.search(r"/d/([^/]+)/", pres_url)
+    if not m:
+        return None
+
+    file_id = m.group(1)
+    embed_url = (
+        f"https://docs.google.com/presentation/d/{file_id}/embed?"
+        "start=false&loop=false&delayms=3000"
     )
-
-    # 디자인 CSS (다크모드 & 카드 UI)
-    st.markdown("""
-        <style>
-        .main { background-color: #0e1117; }
-        div[data-testid="column"] {
-            background-color: #1f2937;
-            border-radius: 10px;
-            padding: 15px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-            border: 1px solid #374151;
-            transition: transform 0.2s;
-        }
-        div[data-testid="column"]:hover {
-            transform: translateY(-5px);
-            border-color: #60a5fa;
-        }
-        img { border-radius: 8px; margin-bottom: 10px; }
-        h3 { color: #f3f4f6 !important; font-size: 1.2rem !important; margin-bottom: 0.5rem !important; }
-        p { color: #9ca3af !important; font-size: 0.9rem; }
-        .tag-span {
-            background-color: #374151;
-            color: #60a5fa;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 0.8rem;
-            margin-right: 5px;
-        }
-        .stButton > button {
-            width: 100%;
-            background-color: #2563eb;
-            color: white;
-            border: none;
-            border-radius: 5px;
-        }
-        .stButton > button:hover { background-color: #1d4ed8; }
-        </style>
-    """, unsafe_allow_html=True)
-# endregion ===================================================================================
+    return embed_url
 
 
-# region [데이터 핸들링 (공개 시트 버전)] ====================================================
-def load_data():
+def filter_archive(
+    df: pd.DataFrame,
+    keyword: str = "",
+    selected_tags: Optional[List[str]] = None,
+) -> pd.DataFrame:
     """
-    오류가 있는 행은 무시하고 데이터를 강제로 읽어옵니다.
+    IP명 / 해시태그 기준으로 필터링.
+    - keyword: IP명, 해시태그 텍스트 검색 (대소문자 무시)
+    - selected_tags: 해시태그 멀티선택 필터
     """
-    try:
-        csv_url = st.secrets["public_sheet_url"]
-
-        # 1. on_bad_lines='skip': 칸 수가 안 맞는 행(에러 주범)은 그냥 버리고 읽음
-        # 2. engine='python': 더 강력한 파이썬 엔진 사용
-        df = pd.read_csv(csv_url, on_bad_lines='skip', engine='python')
-
-        # --- [디버깅용] 데이터가 잘 읽혔는지 화면 맨 위에 잠시 출력 ---
-        st.write(f"✅ 읽어온 데이터 개수: {len(df)}개")
-        if len(df) > 0:
-            with st.expander("데이터 미리보기 (클릭해서 확인)"):
-                st.dataframe(df.head())
-        else:
-            st.error("데이터를 읽었는데 내용이 텅 비어있습니다!")
-        # -------------------------------------------------------
-        
-        # 컬럼 정리 (A~E열)
-        expected_cols = ['Title', 'Url', 'Range', 'Tags', 'Poster']
-        
-        # 컬럼이 5개보다 적어도 에러 안 나게 처리
-        if len(df.columns) < 5:
-            # 부족한 만큼 빈 컬럼 추가
-            for i in range(5 - len(df.columns)):
-                df[f'Col_{i}'] = ""
-        
-        # 5개로 자르고 이름 부여
-        df = df.iloc[:, :5]
-        df.columns = expected_cols
-
-        # 필수 데이터(제목) 없는 행 제거 및 정리
-        df = df.dropna(subset=['Title'])
-        df = df.astype(str)
-        df = df.replace('nan', '')
-            
+    if df.empty:
         return df
 
-    except Exception as e:
-        # 에러가 나면 숨기지 말고 그대로 화면에 보여줌 (디버깅용)
-        st.error(f"🚨 심각한 에러 발생: {e}")
-        return pd.DataFrame(columns=['Title', 'Url', 'Range', 'Tags', 'Poster'])
-    
-    
-def filter_data(df, search_term):
-    if not search_term: return df
-    if df.empty: return df
+    temp = df.copy()
+    keyword = (keyword or "").strip()
+    selected_tags = selected_tags or []
 
-    search_term = search_term.lower()
-    mask = (df['Title'].str.lower().str.contains(search_term)) | \
-           (df['Tags'].str.lower().str.contains(search_term))
-    return df[mask]
-# endregion ===================================================================================
+    # 키워드 필터
+    if keyword:
+        low_kw = keyword.lower()
+        temp = temp[
+            temp["ip_name"].str.lower().str.contains(low_kw)
+            | temp["hashtags"].str.lower().str.contains(low_kw)
+        ]
+
+    # 해시태그 멀티 선택 필터
+    if selected_tags:
+        selected_set = set(selected_tags)
+
+        def _has_all_tags(row_tags: List[str]) -> bool:
+            if not isinstance(row_tags, list):
+                return False
+            return selected_set.issubset(set(row_tags))
+
+        temp = temp[temp["hashtags_list"].apply(_has_all_tags)]
+
+    return temp.reset_index(drop=True)
 
 
-# region [UI 컴포넌트] =======================================================================
-def render_header():
-    st.title("🎬 드라마 사전분석 아카이브")
-    st.markdown("마케팅 인사이트와 사전 분석 리포트를 한눈에 확인하세요.")
-    st.markdown("---")
+def ensure_session_selected_ip(df: pd.DataFrame):
+    """
+    session_state에 선택된 IP가 없다면, 현재 필터된 df의 첫 번째 IP를 선택.
+    """
+    if "selected_ip" not in st.session_state:
+        if not df.empty:
+            st.session_state["selected_ip"] = df.iloc[0]["ip_name"]
+        else:
+            st.session_state["selected_ip"] = None
 
-def render_search_bar():
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        return st.text_input("검색", placeholder="드라마명 또는 해시태그(#스릴러)로 검색...", label_visibility="collapsed")
-    with col2:
-        st.write("") 
 
-def render_card(row, index):
-    # 포스터
-    if row['Poster']:
-        st.image(row['Poster'], use_container_width=True)
-    else:
-        st.markdown("Running Time...") # 이미지 없을 때
+def select_ip(ip_name: str):
+    st.session_state["selected_ip"] = ip_name
 
-    # 타이틀
-    st.markdown(f"### {row['Title']}")
-    
-    # 태그
-    if row['Tags']:
-        tags = row['Tags'].split()
-        tags_html = "".join([f"<span class='tag-span'>{tag}</span>" for tag in tags])
-        st.markdown(f"{tags_html}", unsafe_allow_html=True)
-    
-    st.caption(f"📑 분석 범위: {row['Range']}")
-    
-    # 버튼
-    if st.button("분석 리포트 보기", key=f"btn_{index}"):
-        st.session_state['selected_drama'] = row
-        st.rerun()
+# endregion
 
-def render_detail_view(row):
-    if st.button("← 목록으로 돌아가기"):
-        st.session_state['selected_drama'] = None
-        st.rerun()
 
-    st.markdown(f"## 📊 {row['Title']} - 사전분석 리포트")
-    st.markdown(f"**태그:** {row['Tags']} | **범위:** {row['Range']}")
-    st.markdown("---")
-    
-    embed_url = row['Url']
-    if embed_url:
-        components.html(
-            f"""
-            <iframe src="{embed_url}" frameborder="0" width="100%" height="650" 
-            allowfullscreen="true" mozallowfullscreen="true" webkitallowfullscreen="true"></iframe>
-            """,
-            height=670
+# region [5. 사이드바 UI - 검색 & 필터]
+
+def render_sidebar(df: pd.DataFrame):
+    st.sidebar.markdown("### 🔍 검색 / 필터")
+
+    keyword = st.sidebar.text_input(
+        "IP명 또는 해시태그 검색",
+        value="",
+        placeholder="예) 악의꽃, #스릴러, #복수",
+    )
+
+    all_tags = collect_all_hashtags(df)
+    if all_tags:
+        selected_tags = st.sidebar.multiselect(
+            "해시태그 필터",
+            options=all_tags,
+            default=[],
         )
     else:
-        st.warning("등록된 프레젠테이션 URL이 없습니다.")
-# endregion ===================================================================================
+        selected_tags = []
+
+    st.sidebar.markdown("---")
+    st.sidebar.caption("※ 데이터 소스: 공개 Google Sheets - 드라마 사전분석 리스트")
+
+    return keyword, selected_tags
+
+# endregion
 
 
-# region [메인 로직] =========================================================================
-def main():
-    setup_page()
-    if 'selected_drama' not in st.session_state:
-        st.session_state['selected_drama'] = None
+# region [6. 메인 레이아웃 - 카드 리스트 + 상세 리포트]
 
-    df = load_data()
+def render_main_layout(df: pd.DataFrame, filtered_df: pd.DataFrame):
+    # 타이틀
+    st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="subtitle">드라마 마케팅 사전분석 리포트를 한 곳에 모은 아카이브입니다. '
+        'IP별 기획 방향성과 인사이트를 빠르게 찾아보세요.</div>',
+        unsafe_allow_html=True,
+    )
 
-    if st.session_state['selected_drama'] is not None:
-        render_detail_view(st.session_state['selected_drama'])
-    else:
-        render_header()
-        if df.empty:
-            st.warning("데이터를 불러올 수 없습니다. Secrets 설정을 확인해주세요.")
-            return
+    col_left, col_right = st.columns([1.0, 1.6])
 
-        search_input = render_search_bar()
-        filtered_df = filter_data(df, search_input)
+    # --- 좌측: 드라마 카드 리스트 ---
+    with col_left:
+        st.markdown("#### 📚 드라마 리스트")
 
         if filtered_df.empty:
-            st.info("검색 결과가 없습니다.")
+            st.info("조건에 맞는 드라마가 없습니다. 검색어 또는 해시태그를 변경해보세요.")
         else:
-            cols = st.columns(3)
-            for idx, (_, row) in enumerate(filtered_df.iterrows()):
-                with cols[idx % 3]:
-                    render_card(row, idx)
+            for idx, row in filtered_df.iterrows():
+                ip_name = row.get("ip_name", "")
+                hashtags_list = row.get("hashtags_list", [])
+                poster_url = row.get("poster_url", "")
+                slide_range = row.get("slide_range", "")
+
+                if poster_url:
+                    poster_html = (
+                        f'<img class="drama-poster" src="{poster_url}" alt="{ip_name} 포스터" />'
+                    )
+                else:
+                    poster_html = (
+                        '<div class="drama-poster" style="display:flex;align-items:center;'
+                        'justify-content:center;font-size:10px;color:#555;background:#181818;">NO IMAGE</div>'
+                    )
+
+                tags_html = " ".join(
+                    f'<span class="tag-badge">{t}</span>' for t in hashtags_list
+                )
+
+                slide_html = ""
+                if slide_range:
+                    slide_html = f'<div class="drama-subtitle">📑 권장 장표: {slide_range}</div>'
+
+                selected_label = ""
+                if st.session_state.get("selected_ip") == ip_name:
+                    selected_label = '<span class="selected-label">선택됨</span>'
+
+                card_html = f"""
+                <div class="drama-card">
+                    {poster_html}
+                    <div class="drama-meta">
+                        <div>
+                            <div class="drama-title">{ip_name} {selected_label}</div>
+                            {slide_html}
+                        </div>
+                        <div>{tags_html}</div>
+                    </div>
+                </div>
+                """
+
+                st.markdown(card_html, unsafe_allow_html=True)
+
+                btn_key = f"open_{idx}_{ip_name}"
+                if st.button("리포트 열기", key=btn_key):
+                    select_ip(ip_name)
+
+    # --- 우측: 선택된 IP의 프레젠테이션 영역 ---
+    with col_right:
+        st.markdown("#### 📊 사전분석 리포트 뷰어")
+
+        selected_ip = st.session_state.get("selected_ip")
+
+        if not selected_ip:
+            if df.empty:
+                st.info("등록된 드라마가 없습니다. 관리 시트에 데이터를 추가해 주세요.")
+            else:
+                st.info("좌측 카드에서 보고 싶은 드라마를 선택해 주세요.")
+            return
+
+        hit = df[df["ip_name"] == selected_ip]
+        if hit.empty:
+            st.warning("선택된 IP를 데이터에서 찾을 수 없습니다.")
+            return
+
+        row = hit.iloc[0]
+
+        ip_name = row.get("ip_name", "")
+        pres_url = row.get("pres_url", "")
+        slide_range = row.get("slide_range", "")
+        hashtags_list = row.get("hashtags_list", [])
+
+        tags_html = " ".join(
+            f'<span class="tag-badge">{t}</span>' for t in hashtags_list
+        )
+        slide_text = slide_range if slide_range else "전체 장표"
+
+        st.markdown(
+            f"""
+            <div style="margin-bottom:0.5rem;">
+                <div style="font-size:20px;font-weight:700;margin-bottom:0.2rem;">
+                    {ip_name}
+                </div>
+                <div style="font-size:12px;color:#bbbbbb;margin-bottom:0.4rem;">
+                    📑 노출 장표 범위: {slide_text}
+                </div>
+                <div>{tags_html}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        embed_url = build_embed_url(pres_url)
+
+        if not embed_url:
+            st.warning("Google 프레젠테이션 URL 형식이 올바르지 않습니다. (관리 시트 B열 URL을 확인해 주세요)")
+        else:
+            st_iframe(embed_url, height=620)
+
+# endregion
+
+
+# region [7. 메인 실행부]
+
+def main():
+    df = load_archive_df()
+
+    keyword, selected_tags = render_sidebar(df)
+
+    filtered_df = filter_archive(
+        df=df,
+        keyword=keyword,
+        selected_tags=selected_tags,
+    )
+
+    ensure_session_selected_ip(filtered_df)
+    render_main_layout(df, filtered_df)
+
 
 if __name__ == "__main__":
     main()
-# endregion ===================================================================================
+
+# endregion
