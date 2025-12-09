@@ -12,6 +12,7 @@ from streamlit.components.v1 import iframe as st_iframe
 import gspread
 from google.oauth2.service_account import Credentials
 
+
 # 페이지 설정
 PAGE_TITLE = "드라마 사전분석 아카이브"
 PAGE_ICON = "🎬"
@@ -22,12 +23,9 @@ st.set_page_config(
     layout="wide",
 )
 
-# Google Sheets 설정 (st.secrets 사용 가정)
-# - st.secrets["GCP_SERVICE_ACCOUNT"]: 서비스 계정 JSON
-# - st.secrets["ARCHIVE_SHEET_ID"]: 아카이브용 스프레드시트 ID
-GCP_SERVICE_ACCOUNT = dict(st.secrets["gcp_service_account"])  # 섹션 전체를 dict로
+GCP_SERVICE_ACCOUNT = dict(st.secrets["gcp_service_account"])  
 ARCHIVE_SHEET_ID = st.secrets.get("ARCHIVE_SHEET_ID", "")
-ARCHIVE_SHEET_NAME = st.secrets.get("ARCHIVE_SHEET_NAME", "아카이브")
+ARCHIVE_SHEET_NAME = st.secrets.get("ARCHIVE_SHEET_NAME", "ac")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
@@ -144,6 +142,8 @@ html, body, [class*="css"]  {
 
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # endregion
+
+st.sidebar.write("DEBUG:", bool(GCP_SERVICE_ACCOUNT), ARCHIVE_SHEET_ID, ARCHIVE_SHEET_NAME)
 
 
 # region [3. Google Sheets 연동 & 데이터 로딩]
