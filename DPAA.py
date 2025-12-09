@@ -54,38 +54,49 @@ def setup_page():
 # region [데이터 핸들링 (공개 시트 버전)] ====================================================
 def load_data():
     """
-    '웹에 게시'된 CSV 링크를 그대로 읽어옵니다. (가장 안정적)
+    오류가 있는 행은 무시하고 데이터를 강제로 읽어옵니다.
     """
     try:
-        # 1. Secrets에서 URL 가져오기
         csv_url = st.secrets["public_sheet_url"]
 
-        # 2. 판다스로 바로 읽기 (변환 로직 삭제함)
-        df = pd.read_csv(csv_url)
+        # 1. on_bad_lines='skip': 칸 수가 안 맞는 행(에러 주범)은 그냥 버리고 읽음
+        # 2. engine='python': 더 강력한 파이썬 엔진 사용
+        df = pd.read_csv(csv_url, on_bad_lines='skip', engine='python')
+
+        # --- [디버깅용] 데이터가 잘 읽혔는지 화면 맨 위에 잠시 출력 ---
+        st.write(f"✅ 읽어온 데이터 개수: {len(df)}개")
+        if len(df) > 0:
+            with st.expander("데이터 미리보기 (클릭해서 확인)"):
+                st.dataframe(df.head())
+        else:
+            st.error("데이터를 읽었는데 내용이 텅 비어있습니다!")
+        # -------------------------------------------------------
         
-        # 3. 컬럼명 강제 정리 (A~E열)
+        # 컬럼 정리 (A~E열)
         expected_cols = ['Title', 'Url', 'Range', 'Tags', 'Poster']
         
-        # 데이터가 있는 경우에만 처리
-        if not df.empty:
-            # 컬럼 수가 5개보다 많으면 자르고, 적으면 채움
-            if len(df.columns) >= 5:
-                df = df.iloc[:, :5]
-                df.columns = expected_cols
-            else:
-                # 컬럼 부족 시 에러 방지용 빈 데이터프레임
-                return pd.DataFrame(columns=expected_cols)
+        # 컬럼이 5개보다 적어도 에러 안 나게 처리
+        if len(df.columns) < 5:
+            # 부족한 만큼 빈 컬럼 추가
+            for i in range(5 - len(df.columns)):
+                df[f'Col_{i}'] = ""
+        
+        # 5개로 자르고 이름 부여
+        df = df.iloc[:, :5]
+        df.columns = expected_cols
 
-            # 필수 데이터 없는 행 제거 및 문자열 변환
-            df = df.dropna(subset=['Title'])
-            df = df.astype(str)
-            df = df.replace('nan', '')
+        # 필수 데이터(제목) 없는 행 제거 및 정리
+        df = df.dropna(subset=['Title'])
+        df = df.astype(str)
+        df = df.replace('nan', '')
             
         return df
 
     except Exception as e:
-        st.error(f"🚨 데이터 로드 실패: {e}")
+        # 에러가 나면 숨기지 말고 그대로 화면에 보여줌 (디버깅용)
+        st.error(f"🚨 심각한 에러 발생: {e}")
         return pd.DataFrame(columns=['Title', 'Url', 'Range', 'Tags', 'Poster'])
+    
     
 def filter_data(df, search_term):
     if not search_term: return df
