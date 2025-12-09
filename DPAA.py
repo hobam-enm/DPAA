@@ -143,8 +143,6 @@ html, body, [class*="css"]  {
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # endregion
 
-st.sidebar.write("DEBUG:", bool(GCP_SERVICE_ACCOUNT), ARCHIVE_SHEET_ID, ARCHIVE_SHEET_NAME)
-
 
 # region [3. Google Sheets 연동 & 데이터 로딩]
 
