@@ -4,7 +4,6 @@
 # region [1. Imports & 기본 설정]
 import re
 from typing import List, Optional
-
 from urllib.parse import urlparse, parse_qs
 
 import pandas as pd
@@ -23,6 +22,16 @@ st.set_page_config(
 
 # 시크릿에서 관리시트 URL 읽기
 ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
+
+# 뷰 모드 (리스트 / 상세)
+VIEW_MODE_LIST = "list"
+VIEW_MODE_DETAIL = "detail"
+
+if "view_mode" not in st.session_state:
+    st.session_state["view_mode"] = VIEW_MODE_LIST
+
+if "selected_ip" not in st.session_state:
+    st.session_state["selected_ip"] = None
 
 # endregion
 
@@ -111,17 +120,23 @@ html, body, [class*="css"]  {
     color: #ddd;
 }
 
-/* 버튼 커스터마이징 (카드 안 "리포트 열기") */
+/* 버튼 커스터마이징 (모든 st.button 공통) */
 .stButton>button {
     width: 100%;
     border-radius: 999px;
     border: 1px solid #ff6b6b;
-    background: linear-gradient(90deg, #ff6b6b, #ff9f43);
-    color: white;
+    background: #ffffff;
+    color: #111111;
     font-size: 12px;
     font-weight: 600;
     padding: 4px 0;
     margin-top: 4px;
+    cursor: pointer;
+}
+
+.stButton>button:hover {
+    background: linear-gradient(90deg, #ff6b6b, #ff9f43);
+    color: #ffffff;
 }
 
 /* 선택된 IP 하이라이트 */
@@ -154,7 +169,6 @@ def build_csv_url_from_sheet_url(sheet_url: str) -> Optional[str]:
         return None
 
     sheet_id = m.group(1)
-
     parsed = urlparse(sheet_url)
     qs = parse_qs(parsed.query)
     gid = qs.get("gid", ["0"])[0]  # 기본 탭은 보통 gid=0
@@ -178,14 +192,13 @@ def load_archive_df() -> pd.DataFrame:
     csv_url = build_csv_url_from_sheet_url(ARCHIVE_SHEET_URL)
 
     if not csv_url:
-        # 시크릿 설정 안 되어 있을 때 최소 동작용 더미
         df_dummy = pd.DataFrame(
             [
                 {
                     "IP명": "예시 드라마",
                     "프레젠테이션 주소": "https://docs.google.com/presentation/d/EXAMPLE_ID/edit",
                     "노출 장표": "1-10",
-                    "해시태그": "#로맨스 #스릴러",
+                    "해시태그": "#로맨스#스릴러#복수",
                     "포스터이미지URL": "",
                 }
             ]
@@ -253,7 +266,7 @@ def normalize_archive_df(df: pd.DataFrame) -> pd.DataFrame:
     df["hashtags"] = df["hashtags"].astype(str).str.strip()
     df["poster_url"] = df["poster_url"].astype(str).str.strip()
 
-    # 해시태그 파싱
+    # 해시태그 파싱 (# 단위 기준)
     df["hashtags_list"] = df["hashtags"].apply(parse_hashtags)
 
     # 빈 IP 제거
@@ -267,21 +280,21 @@ def normalize_archive_df(df: pd.DataFrame) -> pd.DataFrame:
 
 def parse_hashtags(tag_str: str) -> List[str]:
     """
-    '#스릴러 #복수 #로맨스' → ['#스릴러', '#복수', '#로맨스']
-    '#'가 빠진 텍스트도 자동으로 '#' 붙여서 처리.
+    해시태그는 '#단위'로만 구분.
+    예) "#로맨스#스릴러 #복수" → ['#로맨스', '#스릴러', '#복수']
+    (띄어쓰기는 무시하고, 문자열 안의 '#' 토큰만 추출)
     """
     if not isinstance(tag_str, str) or tag_str.strip() == "":
         return []
 
-    raw_tokens = re.split(r"\s+", tag_str.strip())
-    tokens = []
-    for t in raw_tokens:
-        if t == "":
-            continue
-        if not t.startswith("#"):
-            t = "#" + t
-        tokens.append(t)
-    return sorted(set(tokens), key=tokens.index)
+    # '#무언가' 패턴을 전부 추출
+    found = re.findall(r"#\S+", tag_str)
+    # 순서 유지 + 중복 제거
+    seen = []
+    for t in found:
+        if t not in seen:
+            seen.append(t)
+    return seen
 
 
 def collect_all_hashtags(df: pd.DataFrame) -> List[str]:
@@ -290,6 +303,7 @@ def collect_all_hashtags(df: pd.DataFrame) -> List[str]:
         if not isinstance(row_tags, list):
             continue
         tags.extend(row_tags)
+    # 유니크 + 정렬
     return sorted(set(tags))
 
 
@@ -299,6 +313,8 @@ def build_embed_url(pres_url: str) -> Optional[str]:
     예)
       입력: https://docs.google.com/presentation/d/FILE_ID/edit?slide=...
       출력: https://docs.google.com/presentation/d/FILE_ID/embed?start=false&loop=false&delayms=3000
+    (슬라이드 "범위 제한"은 Google Slides embed에서 기술적으로 막기 어렵기 때문에
+     여기서는 전체 장표를 임베딩하고, 범위는 안내용 메타로만 사용)
     """
     if not isinstance(pres_url, str) or "docs.google.com/presentation" not in pres_url:
         return None
@@ -313,6 +329,32 @@ def build_embed_url(pres_url: str) -> Optional[str]:
         "start=false&loop=false&delayms=3000"
     )
     return embed_url
+
+
+def parse_slide_range_text(slide_range: str) -> tuple[Optional[int], Optional[int]]:
+    """
+    텍스트 '1-10' / '5' 형태를 (start, end) 튜플로 변환.
+    - '1-10' → (1, 10)
+    - '5'    → (5, 5)
+    - 이상하면 (None, None)
+    """
+    if not isinstance(slide_range, str):
+        return None, None
+
+    s = slide_range.strip()
+    if s == "":
+        return None, None
+
+    m = re.match(r"^(\d+)\s*-\s*(\d+)$", s)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+
+    m = re.match(r"^(\d+)$", s)
+    if m:
+        v = int(m.group(1))
+        return v, v
+
+    return None, None
 
 
 def filter_archive(
@@ -358,7 +400,7 @@ def ensure_session_selected_ip(df: pd.DataFrame):
     """
     session_state에 선택된 IP가 없다면, 현재 필터된 df의 첫 번째 IP를 선택.
     """
-    if "selected_ip" not in st.session_state:
+    if "selected_ip" not in st.session_state or st.session_state["selected_ip"] is None:
         if not df.empty:
             st.session_state["selected_ip"] = df.iloc[0]["ip_name"]
         else:
@@ -366,7 +408,12 @@ def ensure_session_selected_ip(df: pd.DataFrame):
 
 
 def select_ip(ip_name: str):
+    """
+    카드 버튼 클릭 시 호출해서 선택 IP를 세션에 저장하고,
+    상세 페이지(view_mode=detail)로 전환.
+    """
     st.session_state["selected_ip"] = ip_name
+    st.session_state["view_mode"] = VIEW_MODE_DETAIL
 
 # endregion
 
@@ -400,10 +447,10 @@ def render_sidebar(df: pd.DataFrame):
 # endregion
 
 
-# region [6. 메인 레이아웃 - 카드 리스트 + 상세 리포트]
+# region [6-A. 메인 레이아웃 - 리스트 페이지]
 
-def render_main_layout(df: pd.DataFrame, filtered_df: pd.DataFrame):
-    # 타이틀
+def render_list_view(filtered_df: pd.DataFrame):
+    """전체 리스트 페이지 (1컬럼 카드 나열)"""
     st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="subtitle">드라마 마케팅 사전분석 리포트를 한 곳에 모은 아카이브입니다. '
@@ -411,113 +458,129 @@ def render_main_layout(df: pd.DataFrame, filtered_df: pd.DataFrame):
         unsafe_allow_html=True,
     )
 
-    col_left, col_right = st.columns([1.0, 1.6])
+    st.markdown("#### 📚 드라마 리스트")
 
-    # --- 좌측: 드라마 카드 리스트 ---
-    with col_left:
-        st.markdown("#### 📚 드라마 리스트")
+    if filtered_df.empty:
+        st.info("조건에 맞는 드라마가 없습니다. 검색어 또는 해시태그를 변경해보세요.")
+        return
 
-        if filtered_df.empty:
-            st.info("조건에 맞는 드라마가 없습니다. 검색어 또는 해시태그를 변경해보세요.")
-        else:
-            for idx, row in filtered_df.iterrows():
-                ip_name = row.get("ip_name", "")
-                hashtags_list = row.get("hashtags_list", [])
-                poster_url = row.get("poster_url", "")
-                slide_range = row.get("slide_range", "")
-
-                if poster_url:
-                    poster_html = (
-                        f'<img class="drama-poster" src="{poster_url}" alt="{ip_name} 포스터" />'
-                    )
-                else:
-                    poster_html = (
-                        '<div class="drama-poster" style="display:flex;align-items:center;'
-                        'justify-content:center;font-size:10px;color:#555;background:#181818;">NO IMAGE</div>'
-                    )
-
-                tags_html = " ".join(
-                    f'<span class="tag-badge">{t}</span>' for t in hashtags_list
-                )
-
-                slide_html = ""
-                if slide_range:
-                    slide_html = f'<div class="drama-subtitle">📑 권장 장표: {slide_range}</div>'
-
-                selected_label = ""
-                if st.session_state.get("selected_ip") == ip_name:
-                    selected_label = '<span class="selected-label">선택됨</span>'
-
-                card_html = f"""
-                <div class="drama-card">
-                    {poster_html}
-                    <div class="drama-meta">
-                        <div>
-                            <div class="drama-title">{ip_name} {selected_label}</div>
-                            {slide_html}
-                        </div>
-                        <div>{tags_html}</div>
-                    </div>
-                </div>
-                """
-
-                st.markdown(card_html, unsafe_allow_html=True)
-
-                btn_key = f"open_{idx}_{ip_name}"
-                if st.button("리포트 열기", key=btn_key):
-                    select_ip(ip_name)
-
-    # --- 우측: 선택된 IP의 프레젠테이션 영역 ---
-    with col_right:
-        st.markdown("#### 📊 사전분석 리포트 뷰어")
-
-        selected_ip = st.session_state.get("selected_ip")
-
-        if not selected_ip:
-            if df.empty:
-                st.info("등록된 드라마가 없습니다. 관리 시트에 데이터를 추가해 주세요.")
-            else:
-                st.info("좌측 카드에서 보고 싶은 드라마를 선택해 주세요.")
-            return
-
-        hit = df[df["ip_name"] == selected_ip]
-        if hit.empty:
-            st.warning("선택된 IP를 데이터에서 찾을 수 없습니다.")
-            return
-
-        row = hit.iloc[0]
-
+    for idx, row in filtered_df.iterrows():
         ip_name = row.get("ip_name", "")
-        pres_url = row.get("pres_url", "")
-        slide_range = row.get("slide_range", "")
         hashtags_list = row.get("hashtags_list", [])
+        poster_url = row.get("poster_url", "")
+        slide_range = row.get("slide_range", "")
+
+        if poster_url:
+            poster_html = (
+                f'<img class="drama-poster" src="{poster_url}" alt="{ip_name} 포스터" />'
+            )
+        else:
+            poster_html = (
+                '<div class="drama-poster" style="display:flex;align-items:center;'
+                'justify-content:center;font-size:10px;color:#555;background:#181818;">NO IMAGE</div>'
+            )
 
         tags_html = " ".join(
             f'<span class="tag-badge">{t}</span>' for t in hashtags_list
         )
-        slide_text = slide_range if slide_range else "전체 장표"
 
-        st.markdown(
-            f"""
-            <div style="margin-bottom:0.5rem;">
-                <div style="font-size:20px;font-weight:700;margin-bottom:0.2rem;">
-                    {ip_name}
-                </div>
-                <div style="font-size:12px;color:#bbbbbb;margin-bottom:0.4rem;">
-                    📑 노출 장표 범위: {slide_text}
+        slide_html = ""
+        if slide_range:
+            slide_html = f'<div class="drama-subtitle">📑 노출 장표: {slide_range}</div>'
+
+        selected_label = ""
+        if st.session_state.get("selected_ip") == ip_name:
+            selected_label = '<span class="selected-label">선택됨</span>'
+
+        card_html = f"""
+        <div class="drama-card">
+            {poster_html}
+            <div class="drama-meta">
+                <div>
+                    <div class="drama-title">{ip_name} {selected_label}</div>
+                    {slide_html}
                 </div>
                 <div>{tags_html}</div>
             </div>
-            """,
+        </div>
+        """
+
+        st.markdown(card_html, unsafe_allow_html=True)
+
+        btn_key = f"open_{idx}_{ip_name}"
+        if st.button("리포트 열기", key=btn_key):
+            select_ip(ip_name)
+            st.experimental_rerun()
+
+# endregion
+
+
+# region [6-B. 상세 페이지 - 리포트 뷰어]
+
+def render_detail_view(df: pd.DataFrame):
+    """선택된 IP의 상세 리포트 페이지"""
+    selected_ip = st.session_state.get("selected_ip")
+
+    # 상단 타이틀 & 뒤로가기 버튼
+    st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
+
+    col_back, col_title = st.columns([0.2, 0.8])
+    with col_back:
+        if st.button("← 드라마 리스트로 돌아가기"):
+            st.session_state["view_mode"] = VIEW_MODE_LIST
+            st.experimental_rerun()
+    with col_title:
+        st.markdown(
+            '<div class="subtitle">선택한 작품의 사전분석 리포트를 확인할 수 있습니다.</div>',
             unsafe_allow_html=True,
         )
 
-        embed_url = build_embed_url(pres_url)
+    if not selected_ip:
+        st.info("선택된 드라마가 없습니다. 먼저 리스트에서 드라마를 선택해 주세요.")
+        return
 
-        if not embed_url:
-            st.warning("Google 프레젠테이션 URL 형식이 올바르지 않습니다. (관리 시트 B열 URL을 확인해 주세요)")
-        else:
-            st_iframe(embed_url, height=620)
+    hit = df[df["ip_name"] == selected_ip]
+    if hit.empty:
+        st.warning("선택된 IP를 데이터에서 찾을 수 없습니다.")
+        return
+
+    row = hit.iloc[0]
+    ip_name = row.get("ip_name", "")
+    pres_url = row.get("pres_url", "")
+    slide_range = row.get("slide_range", "")
+    hashtags_list = row.get("hashtags_list", [])
+
+    tags_html = " ".join(
+        f'<span class="tag-badge">{t}</span>' for t in hashtags_list
+    )
+
+    start_page, end_page = parse_slide_range_text(slide_range)
+    if start_page is not None and end_page is not None:
+        range_text = f"{start_page}–{end_page}p"
+    else:
+        range_text = "전체 장표"
+
+    st.markdown(
+        f"""
+        <div style="margin-bottom:0.5rem;">
+            <div style="font-size:20px;font-weight:700;margin-bottom:0.2rem;">
+                {ip_name}
+            </div>
+            <div style="font-size:12px;color:#bbbbbb;margin-bottom:0.4rem;">
+                📑 노출 장표 범위: {range_text}
+            </div>
+            <div>{tags_html}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    embed_url = build_embed_url(pres_url)
+
+    if not embed_url:
+        st.warning("Google 프레젠테이션 URL 형식이 올바르지 않습니다. (관리 시트 B열 URL을 확인해 주세요)")
+    else:
+        st_iframe(embed_url, height=620)
 
 # endregion
 
@@ -536,7 +599,12 @@ def main():
     )
 
     ensure_session_selected_ip(filtered_df)
-    render_main_layout(df, filtered_df)
+
+    # 뷰 모드에 따라 다른 페이지 렌더링
+    if st.session_state.get("view_mode") == VIEW_MODE_DETAIL:
+        render_detail_view(df)
+    else:
+        render_list_view(filtered_df)
 
 
 if __name__ == "__main__":
