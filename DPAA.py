@@ -54,47 +54,39 @@ def setup_page():
 # region [데이터 핸들링 (공개 시트 버전)] ====================================================
 def load_data():
     """
-    공개된 구글 시트를 CSV로 변환하여 로드합니다. (인증 불필요)
+    '웹에 게시'된 CSV 링크를 그대로 읽어옵니다. (가장 안정적)
     """
     try:
-        # Secrets에서 URL 가져오기
-        sheet_url = st.secrets["public_sheet_url"]
-        
-        # 구글 시트 URL을 CSV 다운로드 포맷으로 변경
-        # /edit 부분을 /export?format=csv 로 바꿈
-        if "/edit" in sheet_url:
-            csv_url = sheet_url.replace("/edit", "/export?format=csv")
-        else:
-            csv_url = sheet_url
+        # 1. Secrets에서 URL 가져오기
+        csv_url = st.secrets["public_sheet_url"]
 
-        # 판다스로 읽기 (맨 첫 번째 탭을 읽어옵니다)
+        # 2. 판다스로 바로 읽기 (변환 로직 삭제함)
         df = pd.read_csv(csv_url)
         
-        # 컬럼 매핑 (A~E열 순서 보장)
-        # 시트 헤더 이름이 달라도 순서대로 강제 적용
+        # 3. 컬럼명 강제 정리 (A~E열)
         expected_cols = ['Title', 'Url', 'Range', 'Tags', 'Poster']
         
-        if len(df.columns) >= 5:
-            df = df.iloc[:, :5] # 5개 열만 자름
-            df.columns = expected_cols
-        else:
-            # 컬럼 부족 시 빈 데이터프레임
-            return pd.DataFrame(columns=expected_cols)
+        # 데이터가 있는 경우에만 처리
+        if not df.empty:
+            # 컬럼 수가 5개보다 많으면 자르고, 적으면 채움
+            if len(df.columns) >= 5:
+                df = df.iloc[:, :5]
+                df.columns = expected_cols
+            else:
+                # 컬럼 부족 시 에러 방지용 빈 데이터프레임
+                return pd.DataFrame(columns=expected_cols)
 
-        # 필수 데이터(제목) 없는 행 제거 및 문자열 변환
-        df = df.dropna(subset=['Title'])
-        df = df.astype(str)
-        
-        # 'nan' 문자열 처리
-        df = df.replace('nan', '')
+            # 필수 데이터 없는 행 제거 및 문자열 변환
+            df = df.dropna(subset=['Title'])
+            df = df.astype(str)
+            df = df.replace('nan', '')
             
         return df
 
     except Exception as e:
         st.error(f"🚨 데이터 로드 실패: {e}")
-        st.info("Tip: 시트가 '링크가 있는 모든 사용자 공개'로 설정되어 있는지, Secrets에 URL이 정확한지 확인하세요.")
         return pd.DataFrame(columns=['Title', 'Url', 'Range', 'Tags', 'Poster'])
-
+    
 def filter_data(df, search_term):
     if not search_term: return df
     if df.empty: return df
