@@ -27,7 +27,7 @@ st.set_page_config(
 # - st.secrets["ARCHIVE_SHEET_ID"]: 아카이브용 스프레드시트 ID
 GCP_SERVICE_ACCOUNT = dict(st.secrets["gcp_service_account"])  # 섹션 전체를 dict로
 ARCHIVE_SHEET_ID = st.secrets.get("ARCHIVE_SHEET_ID", "")
-ARCHIVE_SHEET_NAME = st.secrets.get("ARCHIVE_SHEET_NAME", "Archive")
+ARCHIVE_SHEET_NAME = st.secrets.get("ARCHIVE_SHEET_NAME", "아카이브")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
