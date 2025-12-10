@@ -54,6 +54,11 @@ html, body, [class*="css"]  {
                  "Noto Sans KR", "Segoe UI", sans-serif;
 }
 
+/* 메인 영역 상단 여백 줄이기 */
+[data-testid="stAppViewContainer"] > .main > div {
+    padding-top: 1.2rem;
+}
+
 /* 메인 타이틀 */
 .main-title {
     font-size: 32px;
@@ -68,24 +73,24 @@ html, body, [class*="css"]  {
 .subtitle {
     color: #888;
     font-size: 14px;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.8rem;
 }
 
-/* 카드 컨테이너 – 흰 카드 + 크기 UP */
+/* 카드 컨테이너 – 흰 카드 + 큼직하게 */
 .drama-card {
-    border-radius: 18px;
-    padding: 16px 18px;
-    margin-bottom: 16px;
+    border-radius: 22px;
+    padding: 14px 14px 18px 14px;
+    margin-bottom: 18px;
     background: #ffffff;
     border: 1px solid #e4e4e4;
     display: flex;
-    gap: 12px;
     transition: all 0.18s ease-out;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
 }
 
 .drama-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+    transform: translateY(-3px);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.16);
     border-color: #ff6b6b;
 }
 
@@ -93,55 +98,80 @@ html, body, [class*="css"]  {
 .drama-card-link {
     text-decoration: none;
     color: inherit;
+    display: block;
 }
 
-/* 포스터 이미지 – 가운데 기준으로 꽉 채우기 */
+/* 포스터 래퍼 + 오버레이 구조 */
+.poster-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+/* 포스터 이미지 – 기본 비율 유지, 중앙 기준으로 꽉 채우기 */
 .drama-poster {
-    width: 90px;
-    height: 130px;
-    border-radius: 12px;
-    object-fit: cover;
-    object-position: center center;
+    width: 100%;
+    height: 260px;
+    border-radius: 16px;
+    object-fit: cover;              /* 작은 변에 맞추고 나머지는 잘라냄 */
+    object-position: center center;  /* 가운데 기준으로 자르기 */
     border: 1px solid #dddddd;
+    display: block;
 }
 
-/* 카드 텍스트 */
-.drama-meta {
+/* 정보 오버레이 – 기본은 숨김, hover 시 등장 */
+.drama-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    background: linear-gradient(
+        180deg,
+        rgba(0,0,0,0.35) 0%,
+        rgba(0,0,0,0.85) 100%
+    );
+    opacity: 0;
+    transition: opacity 0.18s ease-out;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    flex: 1;
+    padding: 12px 14px;
+    box-sizing: border-box;
 }
 
-.drama-title {
-    font-size: 16px;
+.drama-card:hover .drama-overlay {
+    opacity: 1;
+}
+
+/* 오버레이 텍스트 */
+.overlay-title {
+    font-size: 15px;
     font-weight: 700;
-    margin-bottom: 0.25rem;
-    color: #111111;
+    color: #ffffff;
+    margin-bottom: 4px;
 }
 
-.drama-subtitle {
+.overlay-meta {
     font-size: 12px;
-    color: #555555;
+    color: #f5f5f5;
+    line-height: 1.4;
 }
 
-/* 해시태그 뱃지 */
+/* 해시태그 뱃지 – 오버레이용 흰 글씨 */
 .tag-badge {
     display: inline-block;
     padding: 3px 7px;
     margin: 2px 4px 0 0;
     border-radius: 999px;
-    background: #f5f5f5;
-    border: 1px solid #dddddd;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.35);
     font-size: 11px;
-    color: #555555;
+    color: #ffffff;
 }
 
-/* 선택된 IP 하이라이트 */
+/* 선택된 IP 하이라이트 (필요 시 사용) */
 .selected-label {
     font-size: 12px;
     font-weight: 600;
-    color: #ff9f43;
+    color: #ffdf7a;
 }
 
 /* 뒤로가기 링크 스타일 */
@@ -404,17 +434,21 @@ def filter_archive(
 # region [5. 페이지 내 검색 / 필터 UI]
 
 def render_filters_inline(df: pd.DataFrame):
-    st.markdown("#### 🔍 검색 / 필터")
+    # 한 줄에: [라벨] [키워드 검색] [해시태그 필터]
+    col_label, col_kw, col_tags = st.columns([1, 2, 2])
 
-    col1, col2 = st.columns([2, 2])
-    with col1:
+    with col_label:
+        st.markdown("**검색 · 필터**")
+
+    with col_kw:
         keyword = st.text_input(
-            "IP명 또는 해시태그 검색",
+            "키워드 검색",
             value="",
-            placeholder="예) 악의꽃, #스릴러, #복수",
+            placeholder="IP명 또는 해시태그 입력",
             label_visibility="collapsed",
         )
-    with col2:
+
+    with col_tags:
         all_tags = collect_all_hashtags(df)
         if all_tags:
             selected_tags = st.multiselect(
@@ -434,12 +468,21 @@ def render_filters_inline(df: pd.DataFrame):
 
 # region [6-A. 리스트 페이지 (4열 그리드)]
 
-def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
+def render_list_view(df: pd.DataFrame, selected_ip: Optional[str]):
+    # 타이틀 & 서브타이틀
     st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="subtitle">드라마 마케팅 사전분석 리포트를 한 곳에 모은 아카이브입니다. '
         'IP별 기획 방향성과 인사이트를 빠르게 찾아보세요.</div>',
         unsafe_allow_html=True,
+    )
+
+    # 제목 바로 아래 검색/필터
+    keyword, selected_tags = render_filters_inline(df)
+    filtered_df = filter_archive(
+        df=df,
+        keyword=keyword,
+        selected_tags=selected_tags,
     )
 
     if filtered_df.empty:
@@ -449,7 +492,7 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
     st.markdown("#### 📚 드라마 리스트")
 
     n = len(filtered_df)
-    per_row = 4
+    per_row = 4  # 1행 4개
 
     for row_start in range(0, n, per_row):
         cols = st.columns(per_row)
@@ -468,25 +511,24 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
                 air_date = row.get("air_date", "")
                 main_cast = row.get("main_cast", "")
 
+                # 포스터 HTML
                 if poster_url:
                     poster_html = (
                         f'<img class="drama-poster" src="{poster_url}" alt="{ip_name} 포스터" />'
                     )
                 else:
                     poster_html = (
-                        '<div class="drama-poster" style="display:flex;align-items:center;'
-                        'justify-content:center;font-size:10px;color:#999;background:#f0f0f0;">NO IMAGE</div>'
+                        '<div class="drama-poster" '
+                        'style="display:flex;align-items:center;justify-content:center;'
+                        'font-size:12px;color:#ffffff;background:#777;">NO IMAGE</div>'
                     )
 
-                # 해시태그 – 점/기호 없이 span만 이어 붙이기
+                # 해시태그 – 점 없이 span만 이어붙이기
                 tags_html = "".join(
                     f'<span class="tag-badge">{t}</span>' for t in hashtags_list
                 )
 
-                selected_label = ""
-                if selected_ip and selected_ip == ip_name:
-                    selected_label = '<span class="selected-label">선택됨</span>'
-
+                # 메타 정보 (주연 / 작성월 / 방영일)
                 meta_lines = []
                 if main_cast and main_cast != "nan":
                     meta_lines.append(f"주연: {main_cast}")
@@ -498,22 +540,27 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
                 if date_line_parts:
                     meta_lines.append(" / ".join(date_line_parts))
 
-                meta_html = "<br/>".join(
-                    f'<div class="drama-subtitle">{line}</div>' for line in meta_lines
-                )
+                meta_html = "<br/>".join(meta_lines)
 
+                selected_label = ""
+                if selected_ip and selected_ip == ip_name:
+                    selected_label = '<span class="selected-label">선택됨</span>'
+
+                # 현재 탭에서 상세 페이지로 전환 (쿼리파라미터)
                 link = f"?view={VIEW_MODE_DETAIL}&ip={quote(ip_name)}"
 
                 card_html = f"""
                 <a href="{link}" class="drama-card-link" target="_self">
                     <div class="drama-card">
-                        {poster_html}
-                        <div class="drama-meta">
-                            <div>
-                                <div class="drama-title">{ip_name} {selected_label}</div>
-                                {meta_html}
+                        <div class="poster-wrapper">
+                            {poster_html}
+                            <div class="drama-overlay">
+                                <div>
+                                    <div class="overlay-title">{ip_name} {selected_label}</div>
+                                    <div class="overlay-meta">{meta_html}</div>
+                                </div>
+                                <div>{tags_html}</div>
                             </div>
-                            <div>{tags_html}</div>
                         </div>
                     </div>
                 </a>
@@ -598,20 +645,15 @@ def render_detail_view(df: pd.DataFrame, selected_ip: str):
 def main():
     df = load_archive_df()
 
-    # 리스트 뷰일 때만 검색/필터 노출
     if CURRENT_VIEW_MODE == VIEW_MODE_DETAIL and CURRENT_SELECTED_IP:
         render_detail_view(df, CURRENT_SELECTED_IP)
     else:
-        keyword, selected_tags = render_filters_inline(df)
-        filtered_df = filter_archive(
-            df=df,
-            keyword=keyword,
-            selected_tags=selected_tags,
-        )
-        render_list_view(filtered_df, CURRENT_SELECTED_IP)
+        render_list_view(df, CURRENT_SELECTED_IP)
 
 
 if __name__ == "__main__":
     main()
 
 # endregion
+
+
