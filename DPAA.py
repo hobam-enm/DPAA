@@ -29,13 +29,12 @@ header {visibility: hidden;}
 footer {visibility: hidden;}
 section[data-testid="stSidebar"] {display:none !important;}
 
-/* [수정 1] 상단 여백 아예 없게 (block-container 강제 조정) */
+/* 상단 여백 제거 */
 .block-container {
     padding-top: 0rem !important;
     padding-bottom: 2rem !important;
-    max-width: 95% !important; /* 좌우도 좀 더 넓게 */
+    max-width: 95% !important;
 }
-/* 앱 헤더 영역 자체를 제거하여 공백 삭제 */
 [data-testid="stHeader"] {
     display: none;
 }
@@ -46,11 +45,11 @@ st.markdown(HIDE_STREAMLIT_UI, unsafe_allow_html=True)
 # 시크릿에서 관리시트 URL 읽기
 ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
 
-# 뷰 모드 (리스트 / 상세) – 쿼리파라미터 기반
+# 뷰 모드 및 파라미터 처리
 VIEW_MODE_LIST = "list"
 VIEW_MODE_DETAIL = "detail"
 
-params = st.query_params  # 최신 Streamlit 버전 대응
+params = st.query_params
 CURRENT_VIEW_MODE = params.get("view", VIEW_MODE_LIST)
 CURRENT_SELECTED_IP = params.get("ip", None)
 # endregion
@@ -58,46 +57,49 @@ CURRENT_SELECTED_IP = params.get("ip", None)
 
 # region [2. 스타일 (CSS) 정의]
 # ==============================================================================
-# 2. 스타일 (CSS) 정의 - 다크 테마 & UI 고도화
+# 2. 스타일 (CSS) 정의
 # ==============================================================================
 CUSTOM_CSS = """
 <style>
-/* 기본 폰트 및 배경 설정 */
+/* 폰트 및 기본 컬러 */
 html, body, [class*="css"]  {
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
     color: #e0e0e0;
 }
-
-/* 앱 전체 배경 */
 [data-testid="stAppViewContainer"] {
     background-color: #141414;
 }
 
-/* ---- [수정 2] 입력창(필터) 다크 모드 스타일링 ---- */
-/* 텍스트 인풋 배경 */
+/* ---- [수정 1] 필터 입력창 스타일 개선 (Placeholder 밝게) ---- */
 [data-testid="stTextInput"] input {
     background-color: #2b2b2b !important;
     color: #ffffff !important;
     border: 1px solid #444 !important;
 }
-/* 멀티셀렉트(태그) 배경 */
+/* 안내 문구(Placeholder) 색상 변경 */
+[data-testid="stTextInput"] input::placeholder {
+    color: #bbbbbb !important;
+    opacity: 1 !important;
+}
+/* 멀티셀렉트 스타일 */
 [data-baseweb="select"] > div {
     background-color: #2b2b2b !important;
     border-color: #444 !important;
     color: white !important;
 }
-/* 멀티셀렉트 내부 칩(선택된 태그) */
+[data-baseweb="select"] input::placeholder {
+    color: #bbbbbb !important;
+}
 [data-baseweb="tag"] {
     background-color: #444 !important;
     color: #eee !important;
 }
-/* 드롭다운 메뉴 배경 */
 [data-baseweb="menu"] {
     background-color: #2b2b2b !important;
     border-color: #444 !important;
 }
 
-/* ---- [Typo] ---- */
+/* 타이틀 */
 .main-title {
     font-size: 32px;
     font-weight: 800;
@@ -105,17 +107,14 @@ html, body, [class*="css"]  {
     background: linear-gradient(135deg, #FF5F6D 0%, #FFC371 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-top: 2rem; /* 헤더 제거했으므로 타이틀 위 여백 약간 추가 */
+    margin-top: 2rem;
     margin-bottom: 0.2rem;
 }
 .subtitle {
     color: #888;
     font-size: 14px;
-    font-weight: 400;
     margin-bottom: 1.5rem;
 }
-
-/* 상세 페이지 타이틀 */
 .detail-title {
     font-size: 36px;
     font-weight: 700;
@@ -128,7 +127,7 @@ html, body, [class*="css"]  {
     margin-bottom: 1rem;
 }
 
-/* ---- [Card & Poster] ---- */
+/* 카드 UI */
 .drama-card {
     border-radius: 0;
     padding: 0;
@@ -137,28 +136,26 @@ html, body, [class*="css"]  {
     border: none;
     display: block;
     cursor: pointer;
-    position: relative; /* z-index context 생성 */
+    position: relative;
 }
-
 .drama-card-link {
     text-decoration: none;
     color: inherit;
     display: block;
 }
 
-/* 포스터 래퍼: [수정 3] 이미지 노출 확실하게 */
+/* 포스터 래퍼 */
 .poster-wrapper {
     position: relative;
     width: 100%;
-    padding-bottom: 150%; /* 2:3 비율 */
+    padding-bottom: 150%; /* 2:3 */
     border-radius: 12px;
     overflow: hidden;
-    background-color: #1f1f1f; /* 로딩 전 배경 */
+    background-color: #1f1f1f;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     transition: transform 0.25s ease;
     z-index: 1;
 }
-
 .drama-poster {
     position: absolute;
     top: 0;
@@ -168,17 +165,15 @@ html, body, [class*="css"]  {
     object-fit: cover;
     object-position: center;
     display: block;
-    z-index: 2; /* 배경보다 위 */
+    z-index: 2;
 }
-
-/* 호버 시 확대 */
 .drama-card:hover .poster-wrapper {
     transform: translateY(-5px);
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
     z-index: 10;
 }
 
-/* ---- [수정 3] 오버레이 레이아웃 조정 ---- */
+/* 오버레이 */
 .drama-overlay {
     position: absolute;
     inset: 0;
@@ -192,15 +187,13 @@ html, body, [class*="css"]  {
     transition: opacity 0.2s ease;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end; /* 아래 정렬하되 */
-    padding: 20px 16px;        /* 패딩을 넉넉히 줘서 내용을 위로 밀어올림 */
+    justify-content: flex-end;
+    padding: 20px 16px;
     z-index: 3;
 }
-
 .drama-card:hover .drama-overlay {
     opacity: 1;
 }
-
 .overlay-title {
     font-size: 17px;
     font-weight: 700;
@@ -209,23 +202,19 @@ html, body, [class*="css"]  {
     text-shadow: 0 1px 2px rgba(0,0,0,0.8);
     line-height: 1.2;
 }
-
 .overlay-meta {
     font-size: 12px;
     color: #d1d1d1;
-    margin-bottom: 12px; /* 태그와 간격 벌림 */
+    margin-bottom: 12px;
     line-height: 1.3;
 }
-
-/* 해시태그 영역: 공간 넉넉하게 */
 .overlay-tags {
     display: flex;
-    flex-wrap: wrap; /* 줄바꿈 허용 */
-    gap: 4px;        /* 태그 사이 간격 */
-    max-height: 80px;/* 너무 길어지면 잘리게 제한하되 넉넉히 */
+    flex-wrap: wrap;
+    gap: 4px;
+    max-height: 80px;
     overflow: hidden;
 }
-
 .tag-badge {
     display: inline-block;
     padding: 3px 8px;
@@ -235,10 +224,10 @@ html, body, [class*="css"]  {
     font-size: 10px;
     color: #fff;
     backdrop-filter: blur(4px);
-    white-space: nowrap; /* 태그 내부 줄바꿈 금지 */
+    white-space: nowrap;
 }
 
-/* 상세페이지 임베드 박스 */
+/* 상세페이지 임베드 */
 .embed-container {
     margin-top: 20px;
     border-radius: 12px;
@@ -338,10 +327,10 @@ def render_header_filter(df: pd.DataFrame):
     
     col1, col2 = st.columns([1, 1])
     with col1:
-        keyword = st.text_input("검색", placeholder="작품명 또는 키워드...", label_visibility="collapsed")
+        keyword = st.text_input("검색", placeholder="작품명 또는 키워드 입력...", label_visibility="collapsed")
     with col2:
         all_tags = collect_all_hashtags(df)
-        selected_tags = st.multiselect("태그", options=all_tags, placeholder="해시태그 필터", label_visibility="collapsed")
+        selected_tags = st.multiselect("태그", options=all_tags, placeholder="해시태그 선택", label_visibility="collapsed")
     
     st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
     return keyword, selected_tags
@@ -365,7 +354,6 @@ def render_list_view(df: pd.DataFrame):
         st.info("조건에 맞는 작품이 없습니다.")
         return
 
-    # 그리드 5열 (반응형 대응)
     per_row = 5
     rows = [filtered.iloc[i:i+per_row] for i in range(0, len(filtered), per_row)]
 
@@ -374,7 +362,6 @@ def render_list_view(df: pd.DataFrame):
         for idx, (_, row) in enumerate(row_data.iterrows()):
             with cols[idx]:
                 ip_name = row["ip_name"]
-                # [수정 3] 이미지 로딩 문제 해결을 위해 poster_url 검증 강화
                 poster_url = row["poster_url"] if row["poster_url"].startswith("http") else "https://via.placeholder.com/300x450/111/555?text=No+Img"
                 
                 meta = []
@@ -382,17 +369,15 @@ def render_list_view(df: pd.DataFrame):
                 if row["air_date"] != "nan" and row["air_date"]: meta.append(row["air_date"])
                 meta_html = "<br>".join(meta)
                 
-                # 태그는 카드에선 최대 3-4개만 노출하거나, 공간 꽉차면 자동 줄바꿈 (CSS로 처리)
                 tags_html = "".join([f'<span class="tag-badge">{t}</span>' for t in row["hashtags_list"]])
-                
                 link = f"?view={VIEW_MODE_DETAIL}&ip={quote(ip_name)}"
                 
-                # HTML 구조
+                # [수정 2] 포스터 이미지 태그에 referrerpolicy="no-referrer" 추가하여 로딩 문제 해결
                 st.markdown(f"""
                 <a href="{link}" class="drama-card-link" target="_self">
                     <div class="drama-card">
                         <div class="poster-wrapper">
-                            <img class="drama-poster" src="{poster_url}" alt="{ip_name}">
+                            <img class="drama-poster" src="{poster_url}" alt="{ip_name}" referrerpolicy="no-referrer">
                             <div class="drama-overlay">
                                 <div class="overlay-title">{ip_name}</div>
                                 <div class="overlay-meta">{meta_html}</div>
@@ -408,7 +393,8 @@ def build_embed_url(pres_url: str):
     if not pres_url or "docs.google.com" not in pres_url: return None
     m = re.search(r"/d/([^/]+)/", pres_url)
     if not m: return None
-    return f"https://docs.google.com/presentation/d/{m.group(1)}/embed?start=false&loop=false&delayms=3000&rm=minimal"
+    # [수정 3] rm=minimal 제거 -> 하단 컨트롤 바(화살표) 생성되어 뒤로가기 가능
+    return f"https://docs.google.com/presentation/d/{m.group(1)}/embed?start=false&loop=false&delayms=3000"
 
 def render_detail_view(df: pd.DataFrame, selected_ip: str):
     st.markdown(f'<a href="?view={VIEW_MODE_LIST}" class="back-button" target="_self">← 목록으로</a>', unsafe_allow_html=True)
@@ -419,7 +405,6 @@ def render_detail_view(df: pd.DataFrame, selected_ip: str):
         return
     row = row.iloc[0]
     
-    # 상세 메타 정보
     tags_html = " ".join([f'<span class="tag-badge" style="font-size:12px; padding:5px 10px;">{t}</span>' for t in row["hashtags_list"]])
     meta_txt = f"{row['written_month']} 작성" 
     if row['air_date'] != "nan": meta_txt += f" | {row['air_date']} 방영"
