@@ -54,9 +54,9 @@ html, body, [class*="css"]  {
                  "Noto Sans KR", "Segoe UI", sans-serif;
 }
 
-/* 메인 영역 상단 여백 줄이기 */
+/* 메인 영역 상단 여백 더 줄이기 */
 [data-testid="stAppViewContainer"] > .main > div {
-    padding-top: 1.2rem;
+    padding-top: 0.4rem;
 }
 
 /* 메인 타이틀 */
@@ -66,14 +66,14 @@ html, body, [class*="css"]  {
     background: linear-gradient(90deg, #ff4b4b, #ff9f43);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.15rem;
 }
 
 /* 서브타이틀 */
 .subtitle {
     color: #888;
     font-size: 14px;
-    margin-bottom: 0.8rem;
+    margin-bottom: 0.5rem;
 }
 
 /* ====== 카드 / 포스터 ====== */
@@ -99,14 +99,14 @@ html, body, [class*="css"]  {
 .poster-wrapper {
     position: relative;
     width: 100%;
-    max-width: 230px;           /* 세로 포스터 느낌으로 약간 슬림하게 */
+    max-width: 220px;           /* 세로형 포스터 카드 폭 */
     margin: 0 auto;
 }
 
-/* 포스터 이미지 – 세로 포스터 비율, 가운데 기준으로 꽉 채우기 */
+/* 포스터 이미지 – 세로 포스터 비율, 위·아래 여백 줄이기 */
 .drama-poster {
     width: 100%;
-    aspect-ratio: 2 / 3;        /* 전형적인 세로 포스터 비율 */
+    aspect-ratio: 3 / 4;        /* 2:3보다 살짝 낮은 비율로 세로 길이 줄이기 */
     border-radius: 18px;
     object-fit: cover;          /* 작은 변에 맞추고 넘치는 부분 잘라냄 */
     object-position: center center;
@@ -193,6 +193,7 @@ html, body, [class*="css"]  {
 
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # endregion
+
 
 
 # region [3. Google Sheets 공개 CSV → DataFrame 로딩]
@@ -439,11 +440,14 @@ def filter_archive(
 # region [5. 페이지 내 검색 / 필터 UI]
 
 def render_filters_inline(df: pd.DataFrame):
-    # 한 줄에: [라벨] [키워드 검색] [해시태그 필터]
-    col_label, col_kw, col_tags = st.columns([1, 2, 2])
+    # 한 줄: [라벨] [키워드 검색] [해시태그 필터]
+    col_label, col_kw, col_tags = st.columns([0.8, 3, 2])
 
     with col_label:
-        st.markdown("**검색 · 필터**")
+        st.markdown(
+            '<div style="font-weight:600;font-size:13px;margin-top:0.2rem;">검색 · 필터</div>',
+            unsafe_allow_html=True,
+        )
 
     with col_kw:
         keyword = st.text_input(
