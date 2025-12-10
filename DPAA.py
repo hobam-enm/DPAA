@@ -315,6 +315,20 @@ def render_list(df):
         st.info("조건에 맞는 드라마가 없습니다.")
         return
 
+    # 🔍 DEBUG: 첫 번째 카드 이미지 체크
+    debug_row = filtered.iloc[0]
+
+    st.markdown("### 🔍 Debug: 첫 번째 카드 이미지 테스트")
+    st.write("IP명:", debug_row.get("ip", ""))
+    st.write("img 컬럼(raw):", debug_row.get("img", ""))
+
+    img_val = debug_row.get("img", "")
+    if isinstance(img_val, str) and img_val.startswith("http"):
+        st.image(img_val, caption="st.image() 로딩 테스트", use_column_width=True)
+    else:
+        st.write("⚠ 이 행의 img 값은 유효한 http URL이 아닙니다.")
+
+
     # 5열 그리드
     cols_per_row = 5
     rows = [filtered.iloc[i:i+cols_per_row] for i in range(0, len(filtered), cols_per_row)]
