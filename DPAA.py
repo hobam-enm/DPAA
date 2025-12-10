@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# 상단 여백 제거 및 헤더 숨김
+# 상단 헤더 / 메뉴 / 푸터 / 사이드바 숨기기 + 상단 여백 제거 (요청사항 반영)
 HIDE_UI = """
 <style>
 #MainMenu {visibility: hidden;}
@@ -30,6 +30,7 @@ header {visibility: hidden;}
 footer {visibility: hidden;}
 section[data-testid="stSidebar"] {display:none !important;}
 
+/* 상단 여백 제거 */
 .block-container {
     padding-top: 0rem !important;
     padding-bottom: 3rem !important;
@@ -50,170 +51,189 @@ CURRENT_VIEW_MODE = params.get("view", VIEW_MODE_LIST)
 CURRENT_SELECTED_IP = params.get("ip", None)
 
 # ==============================================================================
-# [2] CSS 스타일 (전문가 모드)
+# [2] 스타일 (CSS) 정의 - 원본 느낌 유지하되 전문가스럽게 리터칭
 # ==============================================================================
 CUSTOM_CSS = """
 <style>
-/* ---- 전체 테마 ---- */
+/* ---- 전체 폰트 및 배경 ---- */
 html, body, [class*="css"]  {
-    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
     color: #e0e0e0;
 }
 [data-testid="stAppViewContainer"] {
-    background-color: #121212; /* 더 깊은 블랙 */
+    background-color: #141414; /* 다크 모드 배경 유지 */
 }
 
-/* ---- 필터바 UI ---- */
-[data-testid="stTextInput"] input {
-    background-color: #252525 !important;
-    color: #fff !important;
-    border: 1px solid #3a3a3a !important;
-    border-radius: 8px;
-}
-[data-testid="stTextInput"] input::placeholder {
-    color: #888 !important; /* 잘 보이게 수정 */
-}
-[data-baseweb="select"] > div {
-    background-color: #252525 !important;
-    border-color: #3a3a3a !important;
-    border-radius: 8px;
-    color: #fff !important;
-}
-
-/* ---- 타이틀 영역 ---- */
+/* ---- [원복] 메인 타이틀 (오렌지 그라데이션) ---- */
 .main-title {
     font-size: 34px;
     font-weight: 800;
-    background: linear-gradient(90deg, #fff 0%, #aaa 100%);
+    /* 원본의 그라데이션 컬러 복구 */
+    background: linear-gradient(90deg, #ff4b4b, #ff9f43);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     margin-top: 30px;
-    margin-bottom: 5px;
-}
-.subtitle {
-    color: #666;
-    font-size: 14px;
-    margin-bottom: 25px;
-}
-
-/* ---- 상세페이지 헤더 ---- */
-.detail-header {
-    margin-top: 20px;
-    margin-bottom: 20px;
-    border-bottom: 1px solid #333;
-    padding-bottom: 20px;
-}
-.detail-title {
-    font-size: 38px;
-    font-weight: 700;
-    color: #fff;
     margin-bottom: 10px;
 }
-.detail-meta-row {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    color: #aaa;
-    font-size: 14px;
+
+/* ---- [원복] 서브타이틀 (한글 문구) ---- */
+.subtitle {
+    color: #999;
+    font-size: 15px;
+    margin-bottom: 25px;
+    line-height: 1.5;
 }
-.range-badge {
-    display: inline-block;
-    background: rgba(255, 75, 75, 0.2);
-    border: 1px solid #ff4b4b;
-    color: #ff4b4b;
-    padding: 6px 12px;
-    border-radius: 6px;
+
+/* ---- 필터 UI (다크모드 유지) ---- */
+[data-testid="stTextInput"] input {
+    background-color: #2b2b2b !important;
+    color: #fff !important;
+    border: 1px solid #444 !important;
+}
+[data-testid="stTextInput"] input::placeholder {
+    color: #aaa !important; /* 글씨 잘 보이게 */
+}
+[data-baseweb="select"] > div {
+    background-color: #2b2b2b !important;
+    border-color: #444 !important;
+    color: #fff !important;
+}
+[data-baseweb="tag"] {
+    background-color: #444 !important;
+    color: #eee !important;
+}
+
+/* ---- 상세 페이지 헤더 ---- */
+.detail-title {
+    font-size: 36px;
     font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 10px;
+}
+.detail-meta {
     font-size: 14px;
+    color: #b3b3b3;
     margin-bottom: 15px;
 }
 
-/* ---- 카드 & 포스터 (이미지 로딩 최우선) ---- */
+/* ---- 카드 & 포스터 (이미지 로딩 문제 해결) ---- */
 .drama-card {
+    border-radius: 0;
+    padding: 0;
+    margin-bottom: 24px;
+    background: transparent;
+    border: none;
     display: block;
     cursor: pointer;
-    margin-bottom: 24px;
+}
+.drama-card-link {
     text-decoration: none;
     color: inherit;
+    display: block;
 }
+
+/* [수정] 원본 코드로 회귀하되 꽉 차게만 수정 */
 .poster-wrapper {
     position: relative;
     width: 100%;
-    padding-bottom: 150%; /* 2:3 비율 */
+    /* aspect-ratio 사용 (가장 안전한 방법) */
+    aspect-ratio: 2 / 3;
     border-radius: 12px;
     overflow: hidden;
-    background-color: #1e1e1e; /* 로딩 전 배경 */
-    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-    transition: transform 0.2s;
+    background-color: #222; 
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
 }
+
+/* [수정] 이미지는 무조건 꽉 차게 */
+.drama-poster {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* 상하 여백 없이 꽉 채우기 */
+    object-position: center;
+    display: block;
+}
+
+/* 호버 효과 */
 .drama-card:hover .poster-wrapper {
     transform: translateY(-5px);
-    box-shadow: 0 15px 30px rgba(0,0,0,0.7);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
+    transition: all 0.2s ease-out;
 }
 
-/* [중요] 이미지는 CSS 복잡도 제거하여 무조건 노출 */
-.drama-poster {
-    position: absolute;
-    top: 0; 
-    left: 0;
-    width: 100%; 
-    height: 100%;
-    object-fit: cover;
-    z-index: 1; 
-}
-
-/* 오버레이 (정보창) */
+/* 오버레이 */
 .drama-overlay {
     position: absolute;
     inset: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0) 100%);
+    background: linear-gradient(
+        180deg,
+        rgba(0,0,0,0) 0%,
+        rgba(0,0,0,0.6) 40%,
+        rgba(0,0,0,0.95) 100%
+    );
     opacity: 0;
-    transition: opacity 0.2s;
-    z-index: 2;
-    padding: 20px;
+    transition: opacity 0.2s ease-out;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
+    padding: 15px;
 }
-.drama-card:hover .drama-overlay { opacity: 1; }
+.drama-card:hover .drama-overlay {
+    opacity: 1;
+}
 
-.overlay-title { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 6px; }
-.overlay-meta { font-size: 12px; color: #ccc; margin-bottom: 12px; line-height: 1.4; }
+.overlay-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
+}
+.overlay-meta {
+    font-size: 12px;
+    color: #ddd;
+    margin-bottom: 10px;
+    line-height: 1.3;
+}
+
+/* [원복] 해시태그 영역 제한 해제 */
+.overlay-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    /* max-height 제거 -> 태그 많으면 위로 쌓임 */
+}
+
 .tag-badge {
     display: inline-block;
-    padding: 4px 8px;
-    margin: 0 4px 4px 0;
-    background: rgba(255,255,255,0.15);
-    border: 1px solid rgba(255,255,255,0.2);
+    padding: 3px 7px;
     border-radius: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
     font-size: 11px;
-    color: #eee;
-    backdrop-filter: blur(2px);
-}
-
-/* 임베드 컨테이너 */
-.embed-frame {
-    width: 100%;
-    border-radius: 12px;
-    overflow: hidden;
-    background: #000;
-    border: 1px solid #333;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+    color: #fff;
+    white-space: nowrap;
 }
 
 /* 버튼 */
-.btn-back {
+.back-button {
     display: inline-block;
     padding: 8px 16px;
-    background: #333;
+    margin-bottom: 15px;
+    background-color: #333;
     border-radius: 6px;
     color: #fff !important;
-    text-decoration: none;
+    text-decoration: none !important;
     font-size: 13px;
-    margin-bottom: 10px;
-    transition: background 0.2s;
 }
-.btn-back:hover { background: #444; }
+.back-button:hover { background-color: #444; }
+
+/* 임베드 프레임 */
+.embed-container {
+    margin-top: 20px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #333;
+    background: #000;
+}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
@@ -233,20 +253,24 @@ def build_csv_url(sheet_url: str) -> Optional[str]:
 @st.cache_data(ttl=300, show_spinner=False)
 def load_data():
     csv = build_csv_url(ARCHIVE_SHEET_URL)
-    if not csv: return pd.DataFrame()
+    if not csv: 
+        # 더미 데이터
+        return pd.DataFrame([{
+            "ip": "데이터 연동 필요", "tags_list": ["#예시"], "img": "", "url": ""
+        }])
+        
     try:
         df = pd.read_csv(csv)
-        
-        # 컬럼 매핑
         col_map = {
-            "IP명": "ip", "IP": "ip", "프레젠테이션주소": "url", "프레젠테이션 주소": "url",
-            "장표범위": "range", "노출 장표": "range", "해시태그": "tags",
+            "IP명": "ip", "IP": "ip", 
+            "프레젠테이션주소": "url", "프레젠테이션 주소": "url",
+            "장표범위": "range", "노출 장표": "range", 
+            "해시태그": "tags",
             "포스터이미지URL": "img", "포스터 이미지 URL": "img",
             "작성월": "date", "방영일": "air", "주연배우": "cast"
         }
         df = df.rename(columns={k:v for k,v in col_map.items() if k in df.columns})
         
-        # 필수컬럼 보정
         req = ["ip", "url", "range", "tags", "img", "date", "air", "cast"]
         for c in req:
             if c not in df.columns: df[c] = ""
@@ -256,38 +280,35 @@ def load_data():
         return df[df["ip"] != ""]
     except: return pd.DataFrame()
 
-def get_embed_url(pres_url):
-    m = re.search(r"/d/([^/]+)/", pres_url)
-    if not m: return None
-    # start=false, loop=false, delayms=3000 -> 기본 설정
-    # rm=minimal 제거 (컨트롤바 보이게)
-    return f"https://docs.google.com/presentation/d/{m.group(1)}/embed?start=false&loop=false&delayms=60000"
-
 
 # ==============================================================================
 # [4] 뷰 렌더링
 # ==============================================================================
 
-# 4-1. 공통 헤더
+# 4-1. 헤더 (원복됨)
 def render_header(df):
     st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Data-Driven Drama Marketing Insights Archive</div>', unsafe_allow_html=True)
+    # [원복] 원래 있던 한글 문구
+    st.markdown(
+        '<div class="subtitle">드라마 마케팅 사전분석 리포트를 한 곳에 모은 아카이브입니다. '
+        'IP별 기획 방향성과 인사이트를 빠르게 찾아보세요.</div>',
+        unsafe_allow_html=True,
+    )
     
-    col1, col2 = st.columns([1.2, 1])
+    col1, col2 = st.columns([1, 1])
     with col1:
-        kw = st.text_input("검색", placeholder="IP명, 키워드 검색...", label_visibility="collapsed")
+        kw = st.text_input("검색", placeholder="IP명 또는 해시태그...", label_visibility="collapsed")
     with col2:
         all_tags = sorted(list(set([t for sub in df["tags_list"] for t in sub])))
         tags = st.multiselect("태그", all_tags, placeholder="해시태그 필터", label_visibility="collapsed")
     
-    st.write("") # Spacer
+    st.write("") 
     return kw, tags
 
-# 4-2. 리스트 페이지
+# 4-2. 리스트 뷰
 def render_list(df):
     kw, tags = render_header(df)
     
-    # 필터링
     mask = pd.Series(True, index=df.index)
     if kw:
         k = kw.lower()
@@ -298,10 +319,10 @@ def render_list(df):
     filtered = df[mask]
     
     if filtered.empty:
-        st.info("검색 결과가 없습니다.")
+        st.info("조건에 맞는 드라마가 없습니다.")
         return
 
-    # 그리드 렌더링 (5열)
+    # 5열 그리드
     cols_per_row = 5
     rows = [filtered.iloc[i:i+cols_per_row] for i in range(0, len(filtered), cols_per_row)]
     
@@ -309,36 +330,36 @@ def render_list(df):
         cols = st.columns(cols_per_row)
         for idx, (_, row) in enumerate(row_data.iterrows()):
             with cols[idx]:
-                # 포스터 URL이 없거나 깨진경우 처리
-                img_src = row['img'] if row['img'].startswith("http") else "https://via.placeholder.com/300x450/222/888?text=No+Image"
+                # 이미지 없으면 Placeholder
+                img_src = row['img'] if row['img'].startswith("http") else "https://via.placeholder.com/300x450/333/999?text=No+Img"
                 
-                # 메타 텍스트
-                meta_txt = f"{row['cast']}" if row['cast'] else ""
-                if row['air']: meta_txt += f"<br>{row['air']}"
+                meta = []
+                if row['cast']: meta.append(f"주연: {row['cast']}")
+                if row['date']: meta.append(f"{row['date']}")
+                meta_html = "<br>".join(meta)
                 
-                # 태그
-                tags_html = "".join([f'<span class="tag-badge">{t}</span>' for t in row['tags_list'][:4]])
-                
-                # 링크
+                tags_html = "".join([f'<span class="tag-badge">{t}</span>' for t in row['tags_list']])
                 link = f"?view={VIEW_MODE_DETAIL}&ip={quote(row['ip'])}"
                 
-                # [핵심 수정] 이미지 태그 단순화 (referrer 등 제거)
+                # [중요] 포스터 이미지를 원본 방식(img 태그)으로 확실하게 복구
                 st.markdown(f"""
-                <a href="{link}" class="drama-card" target="_self">
-                    <div class="poster-wrapper">
-                        <img class="drama-poster" src="{img_src}" alt="{row['ip']}">
-                        <div class="drama-overlay">
-                            <div class="overlay-title">{row['ip']}</div>
-                            <div class="overlay-meta">{meta_txt}</div>
-                            <div style="line-height:1.2;">{tags_html}</div>
+                <a href="{link}" class="drama-card-link" target="_self">
+                    <div class="drama-card">
+                        <div class="poster-wrapper">
+                            <img class="drama-poster" src="{img_src}" alt="{row['ip']}">
+                            <div class="drama-overlay">
+                                <div class="overlay-title">{row['ip']}</div>
+                                <div class="overlay-meta">{meta_html}</div>
+                                <div class="overlay-tags">{tags_html}</div>
+                            </div>
                         </div>
                     </div>
                 </a>
                 """, unsafe_allow_html=True)
 
-# 4-3. 상세 페이지
+# 4-3. 상세 뷰
 def render_detail(df, ip):
-    st.markdown(f'<a href="?view={VIEW_MODE_LIST}" class="btn-back" target="_self">← 목록으로 돌아가기</a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="?view={VIEW_MODE_LIST}" class="back-button" target="_self">← 드라마 리스트로 돌아가기</a>', unsafe_allow_html=True)
     
     row = df[df["ip"] == ip]
     if row.empty:
@@ -346,41 +367,47 @@ def render_detail(df, ip):
         return
     row = row.iloc[0]
     
-    # 태그 HTML
-    tags_html = " ".join([f'<span class="tag-badge" style="padding:5px 10px; font-size:12px;">{t}</span>' for t in row['tags_list']])
+    tags_html = " ".join([f'<span class="tag-badge" style="font-size:12px; padding:5px 10px;">{t}</span>' for t in row['tags_list']])
     
-    # 상세 메타 정보
-    meta_info = []
-    if row['date']: meta_info.append(f"📅 작성: {row['date']}")
-    if row['air']: meta_info.append(f"📺 방영: {row['air']}")
-    if row['cast']: meta_info.append(f"🎭 주연: {row['cast']}")
-    meta_str = " &nbsp;|&nbsp; ".join(meta_info)
+    meta_txt = []
+    if row['date']: meta_txt.append(f"작성: {row['date']}")
+    if row['air']: meta_txt.append(f"방영: {row['air']}")
+    if row['cast']: meta_txt.append(f"주연: {row['cast']}")
+    meta_str = "  |  ".join(meta_txt)
 
-    # [핵심 수정] 장표 범위 안내 배너 (Range Badge)
-    range_html = ""
-    if row['range']:
-        range_html = f'<div class="range-badge">🎯 핵심 열람 범위: {row["range"]} 페이지</div>'
-
+    # [수정] 뱃지 제거, 깔끔한 타이틀
     st.markdown(f"""
-        <div class="detail-header">
-            {range_html}
+        <div style="margin: 10px 0 20px 0;">
             <div class="detail-title">{row['ip']}</div>
-            <div class="detail-meta-row">
-                {meta_str}
-            </div>
-            <div style="margin-top:15px;">{tags_html}</div>
+            <div class="detail-meta">{meta_str}</div>
+            <div>{tags_html}</div>
         </div>
     """, unsafe_allow_html=True)
     
-    # 임베드
-    embed_url = get_embed_url(row['url'])
-    if embed_url:
-        st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
-        # 16:9 비율 유지를 위해 높이 넉넉히 설정 (720px)
-        st_iframe(embed_url, height=720, scrolling=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    # [우회 방법] PDF 파일인지 확인하여 분기 처리
+    target_url = row['url']
+    is_pdf = target_url.lower().endswith(".pdf") or "/file/d/" in target_url
+    
+    st.markdown('<div class="embed-container">', unsafe_allow_html=True)
+    
+    if is_pdf:
+        # PDF인 경우 (Google Drive Preview 사용) -> 핵심 페이지만 자른 PDF를 올렸을 때 유용
+        # /view를 /preview로 바꾸면 깔끔하게 나옴
+        pdf_preview_url = target_url.replace("/view", "/preview")
+        st_iframe(pdf_preview_url, height=750, scrolling=True)
+    elif "docs.google.com/presentation" in target_url:
+        # 일반 슬라이드인 경우
+        m = re.search(r"/d/([^/]+)/", target_url)
+        if m:
+            # start=false: 자동재생 끔
+            embed_url = f"https://docs.google.com/presentation/d/{m.group(1)}/embed?start=false&loop=false&delayms=60000"
+            st_iframe(embed_url, height=750, scrolling=True)
+        else:
+            st.warning("URL 형식이 올바르지 않습니다.")
     else:
-        st.warning("연결된 프레젠테이션 주소가 없습니다.")
+        st.warning("프레젠테이션 주소가 없거나 지원하지 않는 형식입니다.")
+        
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
 # [5] 메인 실행
