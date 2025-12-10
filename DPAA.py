@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 # 🎬 드라마 사전분석 아카이브 (Streamlit + 공개 Google Sheets CSV + Google Slides Embed)
 
-# region [1. Imports & 기본 설정]
 import re
 from typing import List, Optional
 from urllib.parse import urlparse, parse_qs, quote
@@ -10,7 +9,9 @@ import pandas as pd
 import streamlit as st
 from streamlit.components.v1 import iframe as st_iframe
 
-# 페이지 설정
+# ==============================================================================
+# [1] 기본 설정
+# ==============================================================================
 PAGE_TITLE = "드라마 사전분석 아카이브"
 PAGE_ICON = "🎬"
 
@@ -21,422 +22,375 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# 상단 헤더 / 메뉴 / 푸터 / 사이드바 숨기기 & 전체 배경 톤 조정
-HIDE_STREAMLIT_UI = """
+# 상단 여백 제거 및 헤더 숨김
+HIDE_UI = """
 <style>
 #MainMenu {visibility: hidden;}
 header {visibility: hidden;}
 footer {visibility: hidden;}
 section[data-testid="stSidebar"] {display:none !important;}
 
-/* 상단 여백 제거 */
 .block-container {
     padding-top: 0rem !important;
-    padding-bottom: 2rem !important;
+    padding-bottom: 3rem !important;
     max-width: 95% !important;
 }
-[data-testid="stHeader"] {
-    display: none;
-}
+[data-testid="stHeader"] { display: none; }
 </style>
 """
-st.markdown(HIDE_STREAMLIT_UI, unsafe_allow_html=True)
+st.markdown(HIDE_UI, unsafe_allow_html=True)
 
-# 시크릿에서 관리시트 URL 읽기
+# 시크릿 URL & 파라미터
 ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
-
-# 뷰 모드 및 파라미터 처리
 VIEW_MODE_LIST = "list"
 VIEW_MODE_DETAIL = "detail"
 
 params = st.query_params
 CURRENT_VIEW_MODE = params.get("view", VIEW_MODE_LIST)
 CURRENT_SELECTED_IP = params.get("ip", None)
-# endregion
 
-
-# region [2. 스타일 (CSS) 정의]
 # ==============================================================================
-# 2. 스타일 (CSS) 정의
+# [2] CSS 스타일 (전문가 모드)
 # ==============================================================================
 CUSTOM_CSS = """
 <style>
-/* 폰트 및 기본 컬러 */
+/* ---- 전체 테마 ---- */
 html, body, [class*="css"]  {
-    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
     color: #e0e0e0;
 }
 [data-testid="stAppViewContainer"] {
-    background-color: #141414;
+    background-color: #121212; /* 더 깊은 블랙 */
 }
 
-/* ---- [수정 1] 필터 입력창 스타일 개선 (Placeholder 밝게) ---- */
+/* ---- 필터바 UI ---- */
 [data-testid="stTextInput"] input {
-    background-color: #2b2b2b !important;
-    color: #ffffff !important;
-    border: 1px solid #444 !important;
+    background-color: #252525 !important;
+    color: #fff !important;
+    border: 1px solid #3a3a3a !important;
+    border-radius: 8px;
 }
-/* 안내 문구(Placeholder) 색상 변경 */
 [data-testid="stTextInput"] input::placeholder {
-    color: #bbbbbb !important;
-    opacity: 1 !important;
+    color: #888 !important; /* 잘 보이게 수정 */
 }
-/* 멀티셀렉트 스타일 */
 [data-baseweb="select"] > div {
-    background-color: #2b2b2b !important;
-    border-color: #444 !important;
-    color: white !important;
-}
-[data-baseweb="select"] input::placeholder {
-    color: #bbbbbb !important;
-}
-[data-baseweb="tag"] {
-    background-color: #444 !important;
-    color: #eee !important;
-}
-[data-baseweb="menu"] {
-    background-color: #2b2b2b !important;
-    border-color: #444 !important;
+    background-color: #252525 !important;
+    border-color: #3a3a3a !important;
+    border-radius: 8px;
+    color: #fff !important;
 }
 
-/* 타이틀 */
+/* ---- 타이틀 영역 ---- */
 .main-title {
-    font-size: 32px;
+    font-size: 34px;
     font-weight: 800;
-    letter-spacing: -0.02em;
-    background: linear-gradient(135deg, #FF5F6D 0%, #FFC371 100%);
+    background: linear-gradient(90deg, #fff 0%, #aaa 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-top: 2rem;
-    margin-bottom: 0.2rem;
+    margin-top: 30px;
+    margin-bottom: 5px;
 }
 .subtitle {
-    color: #888;
+    color: #666;
     font-size: 14px;
-    margin-bottom: 1.5rem;
+    margin-bottom: 25px;
+}
+
+/* ---- 상세페이지 헤더 ---- */
+.detail-header {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 20px;
 }
 .detail-title {
-    font-size: 36px;
+    font-size: 38px;
     font-weight: 700;
-    color: #ffffff;
-    margin-bottom: 0.5rem;
+    color: #fff;
+    margin-bottom: 10px;
 }
-.detail-meta {
+.detail-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    color: #aaa;
     font-size: 14px;
-    color: #b3b3b3;
-    margin-bottom: 1rem;
+}
+.range-badge {
+    display: inline-block;
+    background: rgba(255, 75, 75, 0.2);
+    border: 1px solid #ff4b4b;
+    color: #ff4b4b;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 15px;
 }
 
-/* 카드 UI */
+/* ---- 카드 & 포스터 (이미지 로딩 최우선) ---- */
 .drama-card {
-    border-radius: 0;
-    padding: 0;
-    margin-bottom: 24px;
-    background: transparent;
-    border: none;
     display: block;
     cursor: pointer;
-    position: relative;
-}
-.drama-card-link {
+    margin-bottom: 24px;
     text-decoration: none;
     color: inherit;
-    display: block;
 }
-
-/* 포스터 래퍼 */
 .poster-wrapper {
     position: relative;
     width: 100%;
-    padding-bottom: 150%; /* 2:3 */
+    padding-bottom: 150%; /* 2:3 비율 */
     border-radius: 12px;
     overflow: hidden;
-    background-color: #1f1f1f;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    transition: transform 0.25s ease;
-    z-index: 1;
-}
-.drama-poster {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
-    display: block;
-    z-index: 2;
+    background-color: #1e1e1e; /* 로딩 전 배경 */
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    transition: transform 0.2s;
 }
 .drama-card:hover .poster-wrapper {
     transform: translateY(-5px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
-    z-index: 10;
+    box-shadow: 0 15px 30px rgba(0,0,0,0.7);
 }
 
-/* 오버레이 */
+/* [중요] 이미지는 CSS 복잡도 제거하여 무조건 노출 */
+.drama-poster {
+    position: absolute;
+    top: 0; 
+    left: 0;
+    width: 100%; 
+    height: 100%;
+    object-fit: cover;
+    z-index: 1; 
+}
+
+/* 오버레이 (정보창) */
 .drama-overlay {
     position: absolute;
     inset: 0;
-    background: linear-gradient(
-        to bottom,
-        rgba(0,0,0,0) 0%,
-        rgba(0,0,0,0.6) 40%,
-        rgba(0,0,0,0.95) 90%
-    );
+    background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0) 100%);
     opacity: 0;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.2s;
+    z-index: 2;
+    padding: 20px;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    padding: 20px 16px;
-    z-index: 3;
 }
-.drama-card:hover .drama-overlay {
-    opacity: 1;
-}
-.overlay-title {
-    font-size: 17px;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 6px;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
-    line-height: 1.2;
-}
-.overlay-meta {
-    font-size: 12px;
-    color: #d1d1d1;
-    margin-bottom: 12px;
-    line-height: 1.3;
-}
-.overlay-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    max-height: 80px;
-    overflow: hidden;
-}
+.drama-card:hover .drama-overlay { opacity: 1; }
+
+.overlay-title { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 6px; }
+.overlay-meta { font-size: 12px; color: #ccc; margin-bottom: 12px; line-height: 1.4; }
 .tag-badge {
     display: inline-block;
-    padding: 3px 8px;
+    padding: 4px 8px;
+    margin: 0 4px 4px 0;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.2);
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    font-size: 10px;
-    color: #fff;
-    backdrop-filter: blur(4px);
-    white-space: nowrap;
+    font-size: 11px;
+    color: #eee;
+    backdrop-filter: blur(2px);
 }
 
-/* 상세페이지 임베드 */
-.embed-container {
-    margin-top: 20px;
+/* 임베드 컨테이너 */
+.embed-frame {
+    width: 100%;
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
     background: #000;
     border: 1px solid #333;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8);
 }
-.back-button {
-    display: inline-flex;
-    align-items: center;
+
+/* 버튼 */
+.btn-back {
+    display: inline-block;
     padding: 8px 16px;
-    margin-bottom: 10px;
-    background-color: #333;
+    background: #333;
     border-radius: 6px;
     color: #fff !important;
-    text-decoration: none !important;
+    text-decoration: none;
     font-size: 13px;
+    margin-bottom: 10px;
+    transition: background 0.2s;
 }
-.back-button:hover { background-color: #444; }
+.btn-back:hover { background: #444; }
 </style>
 """
-
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-# endregion
 
 
-# region [3. 데이터 로딩]
-def build_csv_url_from_sheet_url(sheet_url: str) -> Optional[str]:
-    if not isinstance(sheet_url, str) or sheet_url.strip() == "":
-        return None
-    m = re.search(r"/spreadsheets/d/([^/]+)/", sheet_url)
-    if not m:
-        return None
-    sheet_id = m.group(1)
-    parsed = urlparse(sheet_url)
-    qs = parse_qs(parsed.query)
-    gid = qs.get("gid", ["0"])[0]
-    return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+# ==============================================================================
+# [3] 데이터 처리
+# ==============================================================================
+def build_csv_url(sheet_url: str) -> Optional[str]:
+    if not sheet_url or "docs.google.com" not in sheet_url: return None
+    try:
+        m = re.search(r"/spreadsheets/d/([^/]+)/", sheet_url)
+        gid = parse_qs(urlparse(sheet_url).query).get("gid", ["0"])[0]
+        return f"https://docs.google.com/spreadsheets/d/{m.group(1)}/export?format=csv&gid={gid}"
+    except: return None
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_archive_df() -> pd.DataFrame:
-    csv_url = build_csv_url_from_sheet_url(ARCHIVE_SHEET_URL)
-    if not csv_url:
-        return normalize_archive_df(pd.DataFrame([{
-            "IP명": "데이터 연동 필요", "해시태그": "#예시"
-        }]))
+def load_data():
+    csv = build_csv_url(ARCHIVE_SHEET_URL)
+    if not csv: return pd.DataFrame()
     try:
-        df_raw = pd.read_csv(csv_url)
-        return normalize_archive_df(df_raw)
-    except Exception:
-        return pd.DataFrame()
-
-def normalize_archive_df(df: pd.DataFrame) -> pd.DataFrame:
-    rename_map = {
-        "IP명": "ip_name", "IP": "ip_name",
-        "프레젠테이션주소": "pres_url", "프레젠테이션 주소": "pres_url",
-        "프레젠테이션 URL": "pres_url", "프레젠테이션": "pres_url",
-        "장표범위": "slide_range", "노출 장표": "slide_range",
-        "해시태그": "hashtags",
-        "포스터이미지URL": "poster_url", "포스터 이미지 URL": "poster_url",
-        "작성월": "written_month", "방영일": "air_date", "주연배우": "main_cast",
-    }
-    for k, v in rename_map.items():
-        if k in df.columns and v not in df.columns:
-            df = df.rename(columns={k: v})
-            
-    required_cols = ["ip_name", "pres_url", "slide_range", "hashtags", "poster_url", "written_month", "air_date", "main_cast"]
-    for col in required_cols:
-        if col not in df.columns:
-            df[col] = ""
-            
-    for c in required_cols:
-        df[c] = df[c].astype(str).str.strip()
+        df = pd.read_csv(csv)
         
-    df["hashtags_list"] = df["hashtags"].apply(parse_hashtags)
-    return df[df["ip_name"] != ""].reset_index(drop=True)
+        # 컬럼 매핑
+        col_map = {
+            "IP명": "ip", "IP": "ip", "프레젠테이션주소": "url", "프레젠테이션 주소": "url",
+            "장표범위": "range", "노출 장표": "range", "해시태그": "tags",
+            "포스터이미지URL": "img", "포스터 이미지 URL": "img",
+            "작성월": "date", "방영일": "air", "주연배우": "cast"
+        }
+        df = df.rename(columns={k:v for k,v in col_map.items() if k in df.columns})
+        
+        # 필수컬럼 보정
+        req = ["ip", "url", "range", "tags", "img", "date", "air", "cast"]
+        for c in req:
+            if c not in df.columns: df[c] = ""
+            df[c] = df[c].astype(str).str.strip().replace("nan", "")
+            
+        df["tags_list"] = df["tags"].apply(lambda x: ["#"+t.strip() for t in x.split("#") if t.strip()])
+        return df[df["ip"] != ""]
+    except: return pd.DataFrame()
 
-def parse_hashtags(tag_str: str) -> List[str]:
-    if not tag_str: return []
-    return ["#" + t.strip() for t in tag_str.split("#") if t.strip()]
-
-def collect_all_hashtags(df: pd.DataFrame) -> List[str]:
-    tags = set()
-    for row_tags in df["hashtags_list"]:
-        tags.update(row_tags)
-    return sorted(tags)
-# endregion
+def get_embed_url(pres_url):
+    m = re.search(r"/d/([^/]+)/", pres_url)
+    if not m: return None
+    # start=false, loop=false, delayms=3000 -> 기본 설정
+    # rm=minimal 제거 (컨트롤바 보이게)
+    return f"https://docs.google.com/presentation/d/{m.group(1)}/embed?start=false&loop=false&delayms=60000"
 
 
-# region [4. 뷰 렌더링]
+# ==============================================================================
+# [4] 뷰 렌더링
+# ==============================================================================
 
-# 4-1. 헤더 & 필터
-def render_header_filter(df: pd.DataFrame):
+# 4-1. 공통 헤더
+def render_header(df):
     st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">IP별 분석 리포트 아카이브</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Data-Driven Drama Marketing Insights Archive</div>', unsafe_allow_html=True)
     
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([1.2, 1])
     with col1:
-        keyword = st.text_input("검색", placeholder="작품명 또는 키워드 입력...", label_visibility="collapsed")
+        kw = st.text_input("검색", placeholder="IP명, 키워드 검색...", label_visibility="collapsed")
     with col2:
-        all_tags = collect_all_hashtags(df)
-        selected_tags = st.multiselect("태그", options=all_tags, placeholder="해시태그 선택", label_visibility="collapsed")
+        all_tags = sorted(list(set([t for sub in df["tags_list"] for t in sub])))
+        tags = st.multiselect("태그", all_tags, placeholder="해시태그 필터", label_visibility="collapsed")
     
-    st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
-    return keyword, selected_tags
+    st.write("") # Spacer
+    return kw, tags
 
-def filter_archive(df, keyword, selected_tags):
-    temp = df.copy()
-    if keyword:
-        k = keyword.lower()
-        temp = temp[temp["ip_name"].str.lower().str.contains(k) | temp["hashtags"].str.lower().str.contains(k)]
-    if selected_tags:
-        s = set(selected_tags)
-        temp = temp[temp["hashtags_list"].apply(lambda x: s.issubset(set(x)))]
-    return temp
-
-# 4-2. 리스트 뷰
-def render_list_view(df: pd.DataFrame):
-    keyword, selected_tags = render_header_filter(df)
-    filtered = filter_archive(df, keyword, selected_tags)
+# 4-2. 리스트 페이지
+def render_list(df):
+    kw, tags = render_header(df)
+    
+    # 필터링
+    mask = pd.Series(True, index=df.index)
+    if kw:
+        k = kw.lower()
+        mask &= df["ip"].str.lower().str.contains(k) | df["tags"].str.lower().str.contains(k)
+    if tags:
+        mask &= df["tags_list"].apply(lambda x: set(tags).issubset(set(x)))
+    
+    filtered = df[mask]
     
     if filtered.empty:
-        st.info("조건에 맞는 작품이 없습니다.")
+        st.info("검색 결과가 없습니다.")
         return
 
-    per_row = 5
-    rows = [filtered.iloc[i:i+per_row] for i in range(0, len(filtered), per_row)]
-
+    # 그리드 렌더링 (5열)
+    cols_per_row = 5
+    rows = [filtered.iloc[i:i+cols_per_row] for i in range(0, len(filtered), cols_per_row)]
+    
     for row_data in rows:
-        cols = st.columns(per_row)
+        cols = st.columns(cols_per_row)
         for idx, (_, row) in enumerate(row_data.iterrows()):
             with cols[idx]:
-                ip_name = row["ip_name"]
-                poster_url = row["poster_url"] if row["poster_url"].startswith("http") else "https://via.placeholder.com/300x450/111/555?text=No+Img"
+                # 포스터 URL이 없거나 깨진경우 처리
+                img_src = row['img'] if row['img'].startswith("http") else "https://via.placeholder.com/300x450/222/888?text=No+Image"
                 
-                meta = []
-                if row["main_cast"] != "nan" and row["main_cast"]: meta.append(row["main_cast"])
-                if row["air_date"] != "nan" and row["air_date"]: meta.append(row["air_date"])
-                meta_html = "<br>".join(meta)
+                # 메타 텍스트
+                meta_txt = f"{row['cast']}" if row['cast'] else ""
+                if row['air']: meta_txt += f"<br>{row['air']}"
                 
-                tags_html = "".join([f'<span class="tag-badge">{t}</span>' for t in row["hashtags_list"]])
-                link = f"?view={VIEW_MODE_DETAIL}&ip={quote(ip_name)}"
+                # 태그
+                tags_html = "".join([f'<span class="tag-badge">{t}</span>' for t in row['tags_list'][:4]])
                 
-                # [수정 2] 포스터 이미지 태그에 referrerpolicy="no-referrer" 추가하여 로딩 문제 해결
+                # 링크
+                link = f"?view={VIEW_MODE_DETAIL}&ip={quote(row['ip'])}"
+                
+                # [핵심 수정] 이미지 태그 단순화 (referrer 등 제거)
                 st.markdown(f"""
-                <a href="{link}" class="drama-card-link" target="_self">
-                    <div class="drama-card">
-                        <div class="poster-wrapper">
-                            <img class="drama-poster" src="{poster_url}" alt="{ip_name}" referrerpolicy="no-referrer">
-                            <div class="drama-overlay">
-                                <div class="overlay-title">{ip_name}</div>
-                                <div class="overlay-meta">{meta_html}</div>
-                                <div class="overlay-tags">{tags_html}</div>
-                            </div>
+                <a href="{link}" class="drama-card" target="_self">
+                    <div class="poster-wrapper">
+                        <img class="drama-poster" src="{img_src}" alt="{row['ip']}">
+                        <div class="drama-overlay">
+                            <div class="overlay-title">{row['ip']}</div>
+                            <div class="overlay-meta">{meta_txt}</div>
+                            <div style="line-height:1.2;">{tags_html}</div>
                         </div>
                     </div>
                 </a>
                 """, unsafe_allow_html=True)
 
-# 4-3. 상세 뷰
-def build_embed_url(pres_url: str):
-    if not pres_url or "docs.google.com" not in pres_url: return None
-    m = re.search(r"/d/([^/]+)/", pres_url)
-    if not m: return None
-    # [수정 3] rm=minimal 제거 -> 하단 컨트롤 바(화살표) 생성되어 뒤로가기 가능
-    return f"https://docs.google.com/presentation/d/{m.group(1)}/embed?start=false&loop=false&delayms=3000"
-
-def render_detail_view(df: pd.DataFrame, selected_ip: str):
-    st.markdown(f'<a href="?view={VIEW_MODE_LIST}" class="back-button" target="_self">← 목록으로</a>', unsafe_allow_html=True)
+# 4-3. 상세 페이지
+def render_detail(df, ip):
+    st.markdown(f'<a href="?view={VIEW_MODE_LIST}" class="btn-back" target="_self">← 목록으로 돌아가기</a>', unsafe_allow_html=True)
     
-    row = df[df["ip_name"] == selected_ip]
+    row = df[df["ip"] == ip]
     if row.empty:
-        st.error("잘못된 접근입니다.")
+        st.error("데이터를 찾을 수 없습니다.")
         return
     row = row.iloc[0]
     
-    tags_html = " ".join([f'<span class="tag-badge" style="font-size:12px; padding:5px 10px;">{t}</span>' for t in row["hashtags_list"]])
-    meta_txt = f"{row['written_month']} 작성" 
-    if row['air_date'] != "nan": meta_txt += f" | {row['air_date']} 방영"
-    if row['main_cast'] != "nan": meta_txt += f" | 주연: {row['main_cast']}"
+    # 태그 HTML
+    tags_html = " ".join([f'<span class="tag-badge" style="padding:5px 10px; font-size:12px;">{t}</span>' for t in row['tags_list']])
     
+    # 상세 메타 정보
+    meta_info = []
+    if row['date']: meta_info.append(f"📅 작성: {row['date']}")
+    if row['air']: meta_info.append(f"📺 방영: {row['air']}")
+    if row['cast']: meta_info.append(f"🎭 주연: {row['cast']}")
+    meta_str = " &nbsp;|&nbsp; ".join(meta_info)
+
+    # [핵심 수정] 장표 범위 안내 배너 (Range Badge)
+    range_html = ""
+    if row['range']:
+        range_html = f'<div class="range-badge">🎯 핵심 열람 범위: {row["range"]} 페이지</div>'
+
     st.markdown(f"""
-        <div style="padding: 10px 0;">
-            <div class="detail-title">{row['ip_name']}</div>
-            <div class="detail-meta">{meta_txt}</div>
-            <div style="margin-top:10px;">{tags_html}</div>
+        <div class="detail-header">
+            {range_html}
+            <div class="detail-title">{row['ip']}</div>
+            <div class="detail-meta-row">
+                {meta_str}
+            </div>
+            <div style="margin-top:15px;">{tags_html}</div>
         </div>
     """, unsafe_allow_html=True)
     
-    embed_url = build_embed_url(row["pres_url"])
+    # 임베드
+    embed_url = get_embed_url(row['url'])
     if embed_url:
-        st.markdown('<div class="embed-container">', unsafe_allow_html=True)
+        st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
+        # 16:9 비율 유지를 위해 높이 넉넉히 설정 (720px)
         st_iframe(embed_url, height=720, scrolling=True)
         st.markdown('</div>', unsafe_allow_html=True)
     else:
-        st.warning("프레젠테이션 주소가 없습니다.")
+        st.warning("연결된 프레젠테이션 주소가 없습니다.")
 
-# endregion
-
-
-# region [5. 실행]
+# ==============================================================================
+# [5] 메인 실행
+# ==============================================================================
 def main():
-    df = load_archive_df()
+    df = load_data()
     if CURRENT_VIEW_MODE == VIEW_MODE_DETAIL and CURRENT_SELECTED_IP:
-        render_detail_view(df, CURRENT_SELECTED_IP)
+        render_detail(df, CURRENT_SELECTED_IP)
     else:
-        render_list_view(df)
+        render_list(df)
 
 if __name__ == "__main__":
     main()
-# endregion
