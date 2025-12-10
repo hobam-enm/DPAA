@@ -132,22 +132,23 @@ html, body, [class*="css"]  {
     display: block;
 }
 
-/* [수정] 포스터 컨테이너: 크기/그림자만 담당 */
+/* [수정] 원본 코드로 회귀하되 꽉 차게만 수정 */
 .poster-wrapper {
     position: relative;
     width: 100%;
+    /* aspect-ratio 사용 (가장 안전한 방법) */
+    aspect-ratio: 2 / 3;
     border-radius: 12px;
     overflow: hidden;
-    background-color: #222;
+    background-color: #222; 
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
 }
 
-/* [수정] 이미지를 다시 비율 기준으로 꽉 차게 */
+/* [수정] 이미지는 무조건 꽉 차게 */
 .drama-poster {
     width: 100%;
-    aspect-ratio: 2 / 3;     /* ⭐ 포스터 비율은 여기서 결정 */
-    height: auto;            /* 부모 높이에 100% 강제하지 않음 */
-    object-fit: cover;       /* 넘치는 부분은 잘라서 꽉 채우기 */
+    height: 100%;
+    object-fit: cover; /* 상하 여백 없이 꽉 채우기 */
     object-position: center;
     display: block;
 }
