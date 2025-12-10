@@ -18,8 +18,19 @@ st.set_page_config(
     page_title=PAGE_TITLE,
     page_icon=PAGE_ICON,
     layout="wide",
-    initial_sidebar_state="collapsed",  # [7] 사이드바 닫힘 디폴트
+    initial_sidebar_state="collapsed",
 )
+
+# 상단 헤더 / 메뉴 / 푸터 / 사이드바 숨기기
+HIDE_STREAMLIT_UI = """
+<style>
+#MainMenu {visibility: hidden;}
+header {visibility: hidden;}
+footer {visibility: hidden;}
+section[data-testid="stSidebar"] {display:none !important;}
+</style>
+"""
+st.markdown(HIDE_STREAMLIT_UI, unsafe_allow_html=True)
 
 # 시크릿에서 관리시트 URL 읽기
 ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
@@ -38,7 +49,6 @@ CURRENT_SELECTED_IP = params.get("ip", [None])[0]
 # region [2. 스타일 (CSS) 정의]
 CUSTOM_CSS = """
 <style>
-/* 전체 배경 / 폰트 */
 html, body, [class*="css"]  {
     font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
                  "Noto Sans KR", "Segoe UI", sans-serif;
@@ -61,7 +71,7 @@ html, body, [class*="css"]  {
     margin-bottom: 1.5rem;
 }
 
-/* 카드 컨테이너 – [1][2][5] 흰 카드 + 크기 키움 */
+/* 카드 컨테이너 – 흰 카드 + 크기 UP */
 .drama-card {
     border-radius: 18px;
     padding: 16px 18px;
@@ -85,12 +95,13 @@ html, body, [class*="css"]  {
     color: inherit;
 }
 
-/* 포스터 이미지 – [5] 더 크게 */
+/* 포스터 이미지 – 가운데 기준으로 꽉 채우기 */
 .drama-poster {
     width: 90px;
     height: 130px;
     border-radius: 12px;
     object-fit: cover;
+    object-position: center center;
     border: 1px solid #dddddd;
 }
 
@@ -105,7 +116,7 @@ html, body, [class*="css"]  {
 .drama-title {
     font-size: 16px;
     font-weight: 700;
-    margin-bottom: 0.2rem;
+    margin-bottom: 0.25rem;
     color: #111111;
 }
 
@@ -154,9 +165,8 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 def build_csv_url_from_sheet_url(sheet_url: str) -> Optional[str]:
     """
     전체 공개된 Google Sheets URL에서 CSV export URL 생성.
-    예) 
-      입력: https://docs.google.com/spreadsheets/d/{ID}/edit?gid=0#gid=0
-      출력: https://docs.google.com/spreadsheets/d/{ID}/export?format=csv&gid=0
+      예) https://docs.google.com/spreadsheets/d/{ID}/edit?gid=0#gid=0
+       →  https://docs.google.com/spreadsheets/d/{ID}/export?format=csv&gid=0
     """
     if not isinstance(sheet_url, str) or sheet_url.strip() == "":
         return None
@@ -168,7 +178,7 @@ def build_csv_url_from_sheet_url(sheet_url: str) -> Optional[str]:
     sheet_id = m.group(1)
     parsed = urlparse(sheet_url)
     qs = parse_qs(parsed.query)
-    gid = qs.get("gid", ["0"])[0]  # 기본 탭은 보통 gid=0
+    gid = qs.get("gid", ["0"])[0]
 
     csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
     return csv_url
@@ -180,11 +190,14 @@ def load_archive_df() -> pd.DataFrame:
     전체 공개된 Google Sheets를 CSV로 읽어와서 DataFrame으로 반환.
 
     기대 컬럼 (1행은 헤더, 2행부터 데이터):
-      - IP명
-      - 프레젠테이션 주소
-      - 노출 장표
-      - 해시태그
-      - 포스터이미지URL
+      - A: IP명
+      - B: 프레젠테이션 주소
+      - C: 노출 장표
+      - D: 해시태그
+      - E: 포스터이미지URL
+      - F: 작성월
+      - G: 방영일
+      - H: 주연배우
     """
     csv_url = build_csv_url_from_sheet_url(ARCHIVE_SHEET_URL)
 
@@ -195,8 +208,11 @@ def load_archive_df() -> pd.DataFrame:
                     "IP명": "예시 드라마",
                     "프레젠테이션 주소": "https://docs.google.com/presentation/d/EXAMPLE_ID/edit",
                     "노출 장표": "1-10",
-                    "해시태그": "#로맨스#스릴러#복수",
+                    "해시태그": "#예시 드라마#로맨스#스릴러",
                     "포스터이미지URL": "",
+                    "작성월": "2025-01",
+                    "방영일": "2025-02-01",
+                    "주연배우": "홍길동, 김영희",
                 }
             ]
         )
@@ -217,9 +233,11 @@ def normalize_archive_df(df: pd.DataFrame) -> pd.DataFrame:
       - slide_range
       - hashtags
       - poster_url
-      - hashtags_list (파싱된 해시태그 리스트)
+      - written_month
+      - air_date
+      - main_cast
+      - hashtags_list
     """
-    # 컬럼명 매핑
     rename_map = {
         # IP명
         "IP명": "ip_name",
@@ -245,6 +263,11 @@ def normalize_archive_df(df: pd.DataFrame) -> pd.DataFrame:
         "포스터 이미지 URL": "poster_url",
         "포스터URL": "poster_url",
         "포스터 URL": "poster_url",
+
+        # 작성월 / 방영일 / 주연배우
+        "작성월": "written_month",
+        "방영일": "air_date",
+        "주연배우": "main_cast",
     }
 
     for k, v in rename_map.items():
@@ -252,18 +275,34 @@ def normalize_archive_df(df: pd.DataFrame) -> pd.DataFrame:
             df = df.rename(columns={k: v})
 
     # 필수 컬럼 기본값 처리
-    for col in ["ip_name", "pres_url", "slide_range", "hashtags", "poster_url"]:
+    for col in [
+        "ip_name",
+        "pres_url",
+        "slide_range",
+        "hashtags",
+        "poster_url",
+        "written_month",
+        "air_date",
+        "main_cast",
+    ]:
         if col not in df.columns:
             df[col] = ""
 
     # 문자열 변환 & strip
-    df["ip_name"] = df["ip_name"].astype(str).str.strip()
-    df["pres_url"] = df["pres_url"].astype(str).str.strip()
-    df["slide_range"] = df["slide_range"].astype(str).str.strip()
-    df["hashtags"] = df["hashtags"].astype(str).str.strip()
-    df["poster_url"] = df["poster_url"].astype(str).str.strip()
+    str_cols = [
+        "ip_name",
+        "pres_url",
+        "slide_range",
+        "hashtags",
+        "poster_url",
+        "written_month",
+        "air_date",
+        "main_cast",
+    ]
+    for c in str_cols:
+        df[c] = df[c].astype(str).str.strip()
 
-    # [6] 해시태그 파싱 – '#단위'로만 자르기
+    # 해시태그 파싱 – #단위로만 자르기
     df["hashtags_list"] = df["hashtags"].apply(parse_hashtags)
 
     # 빈 IP 제거
@@ -278,18 +317,22 @@ def normalize_archive_df(df: pd.DataFrame) -> pd.DataFrame:
 def parse_hashtags(tag_str: str) -> List[str]:
     """
     해시태그는 '#단위'로만 구분.
-    예) "#로맨스#스릴러 #복수" → ['#로맨스', '#스릴러', '#복수']
-    (띄어쓰기는 완전히 무시하고, 문자열 안의 '#' 토큰만 추출)
+    예) "#얄미운 사랑#복수드라마 #스릴러" →
+        ['#얄미운 사랑', '#복수드라마', '#스릴러']
     """
     if not isinstance(tag_str, str) or tag_str.strip() == "":
         return []
 
-    found = re.findall(r"#\S+", tag_str)
-    seen = []
-    for t in found:
-        if t not in seen:
-            seen.append(t)
-    return seen
+    tokens: List[str] = []
+    # '#' 기준으로 split 후, 뒤쪽 덩어리들을 다시 '#' 붙여서 사용
+    for part in tag_str.split("#"):
+        part = part.strip()
+        if not part:
+            continue
+        token = "#" + part  # 공백 포함 전체를 하나의 태그로 취급
+        if token not in tokens:
+            tokens.append(token)
+    return tokens
 
 
 def collect_all_hashtags(df: pd.DataFrame) -> List[str]:
@@ -305,9 +348,8 @@ def build_embed_url(pres_url: str) -> Optional[str]:
     """
     Google Slides 편집 URL → embed URL로 변환.
 
-    ⚠ 슬라이드 범위를 1–9페이지로 '강제 제한'하는 파라미터는
-       Google Slides 임베드에서 제공되지 않는다.
-       (시작 슬라이드만 지정하거나, 아예 별도 파일로 잘라서 쓰는 방식이 권장됨):contentReference[oaicite:0]{index=0}
+    슬라이드 URL 파라미터는 start/loop/delayms, 시작 슬라이드 정도만 지원되며,
+    특정 범위(예: 1–9페이지만 허용)를 강제로 제한하는 옵션은 없다.:contentReference[oaicite:1]{index=1}
     """
     if not isinstance(pres_url, str) or "docs.google.com/presentation" not in pres_url:
         return None
@@ -329,11 +371,7 @@ def filter_archive(
     keyword: str = "",
     selected_tags: Optional[List[str]] = None,
 ) -> pd.DataFrame:
-    """
-    IP명 / 해시태그 기준으로 필터링.
-    - keyword: IP명, 해시태그 텍스트 검색 (대소문자 무시)
-    - selected_tags: 해시태그 멀티선택 필터
-    """
+    """IP명 / 해시태그 기준 필터."""
     if df.empty:
         return df
 
@@ -341,7 +379,6 @@ def filter_archive(
     keyword = (keyword or "").strip()
     selected_tags = selected_tags or []
 
-    # 키워드 필터
     if keyword:
         low_kw = keyword.lower()
         temp = temp[
@@ -349,7 +386,6 @@ def filter_archive(
             | temp["hashtags"].str.lower().str.contains(low_kw)
         ]
 
-    # 해시태그 멀티 선택 필터
     if selected_tags:
         selected_set = set(selected_tags)
 
@@ -365,36 +401,38 @@ def filter_archive(
 # endregion
 
 
-# region [5. 사이드바 UI - 검색 & 필터]
+# region [5. 페이지 내 검색 / 필터 UI]
 
-def render_sidebar(df: pd.DataFrame):
-    st.sidebar.markdown("### 🔍 검색 / 필터")
+def render_filters_inline(df: pd.DataFrame):
+    st.markdown("#### 🔍 검색 / 필터")
 
-    keyword = st.sidebar.text_input(
-        "IP명 또는 해시태그 검색",
-        value="",
-        placeholder="예) 악의꽃, #스릴러, #복수",
-    )
-
-    all_tags = collect_all_hashtags(df)
-    if all_tags:
-        selected_tags = st.sidebar.multiselect(
-            "해시태그 필터",
-            options=all_tags,
-            default=[],
+    col1, col2 = st.columns([2, 2])
+    with col1:
+        keyword = st.text_input(
+            "IP명 또는 해시태그 검색",
+            value="",
+            placeholder="예) 악의꽃, #스릴러, #복수",
+            label_visibility="collapsed",
         )
-    else:
-        selected_tags = []
+    with col2:
+        all_tags = collect_all_hashtags(df)
+        if all_tags:
+            selected_tags = st.multiselect(
+                "해시태그 필터",
+                options=all_tags,
+                default=[],
+                label_visibility="collapsed",
+            )
+        else:
+            selected_tags = []
 
-    st.sidebar.markdown("---")
-    st.sidebar.caption("※ 데이터 소스: 공개 Google Sheets - 드라마 사전분석 리스트")
-
+    st.markdown("---")
     return keyword, selected_tags
 
 # endregion
 
 
-# region [6-A. 리스트 페이지 (그리드 4열)]
+# region [6-A. 리스트 페이지 (4열 그리드)]
 
 def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
     st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
@@ -404,14 +442,14 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
         unsafe_allow_html=True,
     )
 
-    st.markdown("#### 📚 드라마 리스트")
-
     if filtered_df.empty:
         st.info("조건에 맞는 드라마가 없습니다. 검색어 또는 해시태그를 변경해보세요.")
         return
 
+    st.markdown("#### 📚 드라마 리스트")
+
     n = len(filtered_df)
-    per_row = 4  # 1행 4개
+    per_row = 4
 
     for row_start in range(0, n, per_row):
         cols = st.columns(per_row)
@@ -426,7 +464,9 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
                 ip_name = row.get("ip_name", "")
                 hashtags_list = row.get("hashtags_list", [])
                 poster_url = row.get("poster_url", "")
-                # slide_range = row.get("slide_range", "")  # [2] 표시는 안 함
+                written_month = row.get("written_month", "")
+                air_date = row.get("air_date", "")
+                main_cast = row.get("main_cast", "")
 
                 if poster_url:
                     poster_html = (
@@ -438,7 +478,8 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
                         'justify-content:center;font-size:10px;color:#999;background:#f0f0f0;">NO IMAGE</div>'
                     )
 
-                tags_html = " ".join(
+                # 해시태그 – 점/기호 없이 span만 이어 붙이기
+                tags_html = "".join(
                     f'<span class="tag-badge">{t}</span>' for t in hashtags_list
                 )
 
@@ -446,7 +487,21 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
                 if selected_ip and selected_ip == ip_name:
                     selected_label = '<span class="selected-label">선택됨</span>'
 
-                # [4] 현재 탭에서 쿼리파라미터만 바꿔서 전환 (새탭 X)
+                meta_lines = []
+                if main_cast and main_cast != "nan":
+                    meta_lines.append(f"주연: {main_cast}")
+                date_line_parts = []
+                if written_month and written_month != "nan":
+                    date_line_parts.append(f"작성월 {written_month}")
+                if air_date and air_date != "nan":
+                    date_line_parts.append(f"방영일 {air_date}")
+                if date_line_parts:
+                    meta_lines.append(" / ".join(date_line_parts))
+
+                meta_html = "<br/>".join(
+                    f'<div class="drama-subtitle">{line}</div>' for line in meta_lines
+                )
+
                 link = f"?view={VIEW_MODE_DETAIL}&ip={quote(ip_name)}"
 
                 card_html = f"""
@@ -456,6 +511,7 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
                         <div class="drama-meta">
                             <div>
                                 <div class="drama-title">{ip_name} {selected_label}</div>
+                                {meta_html}
                             </div>
                             <div>{tags_html}</div>
                         </div>
@@ -473,12 +529,11 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
 def render_detail_view(df: pd.DataFrame, selected_ip: str):
     st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
 
-    # [4] 뒤로가기 – 현재 탭에서 메인으로 복귀
     st.markdown(
         '<a href="?" class="back-link">← 드라마 리스트로 돌아가기</a>',
         unsafe_allow_html=True,
     )
-    st.markdown("")  # 간격
+    st.markdown("")
 
     if not selected_ip:
         st.info("선택된 드라마가 없습니다. 먼저 리스트에서 드라마를 선택해 주세요.")
@@ -492,11 +547,28 @@ def render_detail_view(df: pd.DataFrame, selected_ip: str):
     row = hit.iloc[0]
     ip_name = row.get("ip_name", "")
     pres_url = row.get("pres_url", "")
-    # slide_range = row.get("slide_range", "")  # [2] 사용자 표시는 생략
     hashtags_list = row.get("hashtags_list", [])
+    written_month = row.get("written_month", "")
+    air_date = row.get("air_date", "")
+    main_cast = row.get("main_cast", "")
 
-    tags_html = " ".join(
+    tags_html = "".join(
         f'<span class="tag-badge">{t}</span>' for t in hashtags_list
+    )
+
+    meta_lines = []
+    if main_cast and main_cast != "nan":
+        meta_lines.append(f"주연: {main_cast}")
+    date_line_parts = []
+    if written_month and written_month != "nan":
+        date_line_parts.append(f"작성월 {written_month}")
+    if air_date and air_date != "nan":
+        date_line_parts.append(f"방영일 {air_date}")
+    if date_line_parts:
+        meta_lines.append(" / ".join(date_line_parts))
+
+    meta_html = "<br/>".join(
+        f'<div class="drama-subtitle">{line}</div>' for line in meta_lines
     )
 
     st.markdown(
@@ -505,14 +577,14 @@ def render_detail_view(df: pd.DataFrame, selected_ip: str):
             <div style="font-size:20px;font-weight:700;margin-bottom:0.2rem;">
                 {ip_name}
             </div>
-            <div>{tags_html}</div>
+            {meta_html}
+            <div style="margin-top:0.3rem;">{tags_html}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
     embed_url = build_embed_url(pres_url)
-
     if not embed_url:
         st.warning("Google 프레젠테이션 URL 형식이 올바르지 않습니다. (관리 시트 B열 URL을 확인해 주세요)")
     else:
@@ -526,17 +598,16 @@ def render_detail_view(df: pd.DataFrame, selected_ip: str):
 def main():
     df = load_archive_df()
 
-    keyword, selected_tags = render_sidebar(df)
-
-    filtered_df = filter_archive(
-        df=df,
-        keyword=keyword,
-        selected_tags=selected_tags,
-    )
-
+    # 리스트 뷰일 때만 검색/필터 노출
     if CURRENT_VIEW_MODE == VIEW_MODE_DETAIL and CURRENT_SELECTED_IP:
         render_detail_view(df, CURRENT_SELECTED_IP)
     else:
+        keyword, selected_tags = render_filters_inline(df)
+        filtered_df = filter_archive(
+            df=df,
+            keyword=keyword,
+            selected_tags=selected_tags,
+        )
         render_list_view(filtered_df, CURRENT_SELECTED_IP)
 
 
