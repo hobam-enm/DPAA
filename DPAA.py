@@ -54,9 +54,9 @@ html, body, [class*="css"]  {
                  "Noto Sans KR", "Segoe UI", sans-serif;
 }
 
-/* 메인 영역 상단 여백 더 줄이기 */
+/* 메인 영역 상단 여백 거의 제거 */
 [data-testid="stAppViewContainer"] > .main > div {
-    padding-top: 0.4rem;
+    padding-top: 0.001rem;
 }
 
 /* 메인 타이틀 */
@@ -66,14 +66,14 @@ html, body, [class*="css"]  {
     background: linear-gradient(90deg, #ff4b4b, #ff9f43);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 0.15rem;
+    margin-bottom: 0.05rem;
 }
 
 /* 서브타이틀 */
 .subtitle {
     color: #888;
     font-size: 14px;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.3rem;
 }
 
 /* ====== 카드 / 포스터 ====== */
@@ -95,31 +95,37 @@ html, body, [class*="css"]  {
     display: block;
 }
 
-/* 포스터 래퍼 + 오버레이 구조 (세로형 카드) */
+/* 포스터 래퍼 – 비율 틀 + 오버플로우 잘라내기 */
 .poster-wrapper {
     position: relative;
     width: 100%;
-    max-width: 220px;           /* 세로형 포스터 카드 폭 */
+    max-width: 220px;           /* 세로형 카드 폭 */
     margin: 0 auto;
+    aspect-ratio: 2 / 3;        /* 기본 포스터 비율 틀 */
+    border-radius: 18px;
+    overflow: hidden;           /* 틀 밖으로 나가는 부분은 잘라냄 */
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.10);
 }
 
-/* 포스터 이미지 – 세로 포스터 비율, 위·아래 여백 줄이기 */
+/* 포스터 이미지
+   - 틀(.poster-wrapper)에 맞춰서
+   - 더 긴 쪽을 잘라내고 항상 꽉 채우기
+   → 포스터 상하비율이 더 크면 좌우만 잘리고,
+     좌우비율이 더 크면 상하만 잘림
+*/
 .drama-poster {
     width: 100%;
-    aspect-ratio: 3 / 4;        /* 2:3보다 살짝 낮은 비율로 세로 길이 줄이기 */
-    border-radius: 18px;
-    object-fit: cover;          /* 작은 변에 맞추고 넘치는 부분 잘라냄 */
+    height: 100%;
+    object-fit: cover;          /* 작은 변 기준으로 맞추고 나머지는 잘라냄 */
     object-position: center center;
-    border: 1px solid #dddddd;
     display: block;
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.10);
-    transition: transform 0.18s ease-out, box-shadow 0.18s ease-out;
 }
 
 /* 호버 시 포스터 살짝 떠오르게 */
-.drama-card:hover .drama-poster {
-    transform: translateY(-4px);
+.drama-card:hover .poster-wrapper {
     box-shadow: 0 16px 32px rgba(0, 0, 0, 0.25);
+    transform: translateY(-3px);
+    transition: all 0.18s ease-out;
 }
 
 /* 정보 오버레이 – 포스터 위에 검정 그라데이션 */
@@ -129,14 +135,14 @@ html, body, [class*="css"]  {
     border-radius: 18px;
     background: linear-gradient(
         180deg,
-        rgba(0,0,0,0.10) 0%,
-        rgba(0,0,0,0.85) 100%
+        rgba(0,0,0,0.15) 0%,
+        rgba(0,0,0,0.88) 100%
     );
     opacity: 0;
     transition: opacity 0.18s ease-out;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: flex-end;   /* 태그는 항상 아래쪽 */
     padding: 12px 14px;
     box-sizing: border-box;
 }
@@ -146,12 +152,23 @@ html, body, [class*="css"]  {
     opacity: 1;
 }
 
+/* 가운데로 내릴 메인 정보 블록 */
+.overlay-main {
+    margin-top: auto;   /* 위쪽 여백 자동 */
+    margin-bottom: auto;/* 아래쪽 여백 자동 → 거의 가운데 위치 */
+}
+
+/* 아래쪽 태그 영역 */
+.overlay-tags {
+    margin-top: 6px;
+}
+
 /* 오버레이 텍스트 */
 .overlay-title {
     font-size: 15px;
     font-weight: 700;
     color: #ffffff;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
 }
 
 .overlay-meta {
@@ -172,7 +189,7 @@ html, body, [class*="css"]  {
     color: #ffffff;
 }
 
-/* 선택된 IP 하이라이트 (필요 시 사용) */
+/* 선택된 IP 하이라이트 */
 .selected-label {
     font-size: 12px;
     font-weight: 600;
@@ -193,6 +210,7 @@ html, body, [class*="css"]  {
 
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # endregion
+
 
 
 
@@ -437,15 +455,17 @@ def filter_archive(
 # endregion
 
 
-# region [5. 페이지 내 검색 / 필터 UI]
+# region [5. 타이틀 + 필터 UI]
 
-def render_filters_inline(df: pd.DataFrame):
-    # 한 줄: [라벨] [키워드 검색] [해시태그 필터]
-    col_label, col_kw, col_tags = st.columns([0.8, 3, 2])
+def render_title_and_filters(df: pd.DataFrame):
+    # [제목+서브텍스트] [키워드 검색] [해시태그 필터] 한 줄
+    col_title, col_kw, col_tags = st.columns([3, 2.2, 2.0])
 
-    with col_label:
+    with col_title:
+        st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
         st.markdown(
-            '<div style="font-weight:600;font-size:13px;margin-top:0.2rem;">검색 · 필터</div>',
+            '<div class="subtitle">드라마 마케팅 사전분석 리포트를 한 곳에 모은 아카이브입니다. '
+            'IP별 기획 방향성과 인사이트를 빠르게 찾아보세요.</div>',
             unsafe_allow_html=True,
         )
 
@@ -475,19 +495,14 @@ def render_filters_inline(df: pd.DataFrame):
 # endregion
 
 
+
 # region [6-A. 리스트 페이지 (4열 그리드)]
 
 def render_list_view(df: pd.DataFrame, selected_ip: Optional[str]):
-    # 타이틀 & 서브타이틀
-    st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="subtitle">드라마 마케팅 사전분석 리포트를 한 곳에 모은 아카이브입니다. '
-        'IP별 기획 방향성과 인사이트를 빠르게 찾아보세요.</div>',
-        unsafe_allow_html=True,
-    )
+    # 제목 + 오른쪽 필터
+    keyword, selected_tags = render_title_and_filters(df)
 
-    # 제목 바로 아래 검색/필터
-    keyword, selected_tags = render_filters_inline(df)
+    # 필터 적용
     filtered_df = filter_archive(
         df=df,
         keyword=keyword,
@@ -501,7 +516,7 @@ def render_list_view(df: pd.DataFrame, selected_ip: Optional[str]):
     st.markdown("#### 📚 드라마 리스트")
 
     n = len(filtered_df)
-    per_row = 4  # 1행 4개
+    per_row = 6  # 1행 4개
 
     for row_start in range(0, n, per_row):
         cols = st.columns(per_row)
@@ -520,7 +535,7 @@ def render_list_view(df: pd.DataFrame, selected_ip: Optional[str]):
                 air_date = row.get("air_date", "")
                 main_cast = row.get("main_cast", "")
 
-                # 포스터 HTML (이제 이게 카드의 전부)
+                # 포스터 이미지
                 if poster_url:
                     poster_html = (
                         f'<img class="drama-poster" src="{poster_url}" alt="{ip_name} 포스터" />'
@@ -564,11 +579,11 @@ def render_list_view(df: pd.DataFrame, selected_ip: Optional[str]):
                         <div class="poster-wrapper">
                             {poster_html}
                             <div class="drama-overlay">
-                                <div>
+                                <div class="overlay-main">
                                     <div class="overlay-title">{ip_name} {selected_label}</div>
                                     <div class="overlay-meta">{meta_html}</div>
                                 </div>
-                                <div>{tags_html}</div>
+                                <div class="overlay-tags">{tags_html}</div>
                             </div>
                         </div>
                     </div>
@@ -578,6 +593,7 @@ def render_list_view(df: pd.DataFrame, selected_ip: Optional[str]):
                 st.markdown(card_html, unsafe_allow_html=True)
 
 # endregion
+
 
 
 # region [6-B. 상세 페이지]
