@@ -18,6 +18,7 @@ st.set_page_config(
     page_title=PAGE_TITLE,
     page_icon=PAGE_ICON,
     layout="wide",
+    initial_sidebar_state="collapsed",  # [7] 사이드바 닫힘 디폴트
 )
 
 # 시크릿에서 관리시트 URL 읽기
@@ -60,21 +61,21 @@ html, body, [class*="css"]  {
     margin-bottom: 1.5rem;
 }
 
-/* 카드 컨테이너 */
+/* 카드 컨테이너 – [1][2][5] 흰 카드 + 크기 키움 */
 .drama-card {
-    border-radius: 16px;
-    padding: 10px 12px;
-    margin-bottom: 14px;
-    background: #181818;               /* 조금 더 밝게 */
-    border: 1px solid #303030;
+    border-radius: 18px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    background: #ffffff;
+    border: 1px solid #e4e4e4;
     display: flex;
-    gap: 10px;
+    gap: 12px;
     transition: all 0.18s ease-out;
 }
 
 .drama-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
     border-color: #ff6b6b;
 }
 
@@ -84,13 +85,13 @@ html, body, [class*="css"]  {
     color: inherit;
 }
 
-/* 포스터 이미지 */
+/* 포스터 이미지 – [5] 더 크게 */
 .drama-poster {
-    width: 70px;
-    height: 100px;
-    border-radius: 10px;
+    width: 90px;
+    height: 130px;
+    border-radius: 12px;
     object-fit: cover;
-    border: 1px solid #333;
+    border: 1px solid #dddddd;
 }
 
 /* 카드 텍스트 */
@@ -102,15 +103,15 @@ html, body, [class*="css"]  {
 }
 
 .drama-title {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 700;
     margin-bottom: 0.2rem;
-    color: #ffffff;
+    color: #111111;
 }
 
 .drama-subtitle {
     font-size: 12px;
-    color: #e0e0e0;
+    color: #555555;
 }
 
 /* 해시태그 뱃지 */
@@ -119,10 +120,10 @@ html, body, [class*="css"]  {
     padding: 3px 7px;
     margin: 2px 4px 0 0;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: #f5f5f5;
+    border: 1px solid #dddddd;
     font-size: 11px;
-    color: #ddd;
+    color: #555555;
 }
 
 /* 선택된 IP 하이라이트 */
@@ -262,7 +263,7 @@ def normalize_archive_df(df: pd.DataFrame) -> pd.DataFrame:
     df["hashtags"] = df["hashtags"].astype(str).str.strip()
     df["poster_url"] = df["poster_url"].astype(str).str.strip()
 
-    # 해시태그 파싱 (# 단위 기준)
+    # [6] 해시태그 파싱 – '#단위'로만 자르기
     df["hashtags_list"] = df["hashtags"].apply(parse_hashtags)
 
     # 빈 IP 제거
@@ -278,6 +279,7 @@ def parse_hashtags(tag_str: str) -> List[str]:
     """
     해시태그는 '#단위'로만 구분.
     예) "#로맨스#스릴러 #복수" → ['#로맨스', '#스릴러', '#복수']
+    (띄어쓰기는 완전히 무시하고, 문자열 안의 '#' 토큰만 추출)
     """
     if not isinstance(tag_str, str) or tag_str.strip() == "":
         return []
@@ -302,7 +304,10 @@ def collect_all_hashtags(df: pd.DataFrame) -> List[str]:
 def build_embed_url(pres_url: str) -> Optional[str]:
     """
     Google Slides 편집 URL → embed URL로 변환.
-    (슬라이드 범위 자체를 강제 제한하는 기능은 Slides embed에서 제공되지 않음)
+
+    ⚠ 슬라이드 범위를 1–9페이지로 '강제 제한'하는 파라미터는
+       Google Slides 임베드에서 제공되지 않는다.
+       (시작 슬라이드만 지정하거나, 아예 별도 파일로 잘라서 쓰는 방식이 권장됨):contentReference[oaicite:0]{index=0}
     """
     if not isinstance(pres_url, str) or "docs.google.com/presentation" not in pres_url:
         return None
@@ -406,7 +411,7 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
         return
 
     n = len(filtered_df)
-    per_row = 4
+    per_row = 4  # 1행 4개
 
     for row_start in range(0, n, per_row):
         cols = st.columns(per_row)
@@ -421,7 +426,7 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
                 ip_name = row.get("ip_name", "")
                 hashtags_list = row.get("hashtags_list", [])
                 poster_url = row.get("poster_url", "")
-                slide_range = row.get("slide_range", "")
+                # slide_range = row.get("slide_range", "")  # [2] 표시는 안 함
 
                 if poster_url:
                     poster_html = (
@@ -430,31 +435,27 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
                 else:
                     poster_html = (
                         '<div class="drama-poster" style="display:flex;align-items:center;'
-                        'justify-content:center;font-size:10px;color:#555;background:#181818;">NO IMAGE</div>'
+                        'justify-content:center;font-size:10px;color:#999;background:#f0f0f0;">NO IMAGE</div>'
                     )
 
                 tags_html = " ".join(
                     f'<span class="tag-badge">{t}</span>' for t in hashtags_list
                 )
 
-                slide_html = ""
-                if slide_range:
-                    slide_html = f'<div class="drama-subtitle">📑 노출 장표: {slide_range}</div>'
-
                 selected_label = ""
                 if selected_ip and selected_ip == ip_name:
                     selected_label = '<span class="selected-label">선택됨</span>'
 
+                # [4] 현재 탭에서 쿼리파라미터만 바꿔서 전환 (새탭 X)
                 link = f"?view={VIEW_MODE_DETAIL}&ip={quote(ip_name)}"
 
                 card_html = f"""
-                <a href="{link}" class="drama-card-link">
+                <a href="{link}" class="drama-card-link" target="_self">
                     <div class="drama-card">
                         {poster_html}
                         <div class="drama-meta">
                             <div>
                                 <div class="drama-title">{ip_name} {selected_label}</div>
-                                {slide_html}
                             </div>
                             <div>{tags_html}</div>
                         </div>
@@ -472,7 +473,7 @@ def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
 def render_detail_view(df: pd.DataFrame, selected_ip: str):
     st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
 
-    # 뒤로가기 링크
+    # [4] 뒤로가기 – 현재 탭에서 메인으로 복귀
     st.markdown(
         '<a href="?" class="back-link">← 드라마 리스트로 돌아가기</a>',
         unsafe_allow_html=True,
@@ -491,23 +492,18 @@ def render_detail_view(df: pd.DataFrame, selected_ip: str):
     row = hit.iloc[0]
     ip_name = row.get("ip_name", "")
     pres_url = row.get("pres_url", "")
-    slide_range = row.get("slide_range", "")
+    # slide_range = row.get("slide_range", "")  # [2] 사용자 표시는 생략
     hashtags_list = row.get("hashtags_list", [])
 
     tags_html = " ".join(
         f'<span class="tag-badge">{t}</span>' for t in hashtags_list
     )
 
-    range_text = slide_range if slide_range else "전체 장표"
-
     st.markdown(
         f"""
         <div style="margin-bottom:0.5rem;">
             <div style="font-size:20px;font-weight:700;margin-bottom:0.2rem;">
                 {ip_name}
-            </div>
-            <div style="font-size:12px;color:#bbbbbb;margin-bottom:0.4rem;">
-                📑 노출 장표 범위: {range_text}
             </div>
             <div>{tags_html}</div>
         </div>
