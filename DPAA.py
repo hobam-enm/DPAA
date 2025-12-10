@@ -76,22 +76,16 @@ html, body, [class*="css"]  {
     margin-bottom: 0.8rem;
 }
 
-/* 카드 컨테이너 – 흰 카드 + 큼직하게 */
-.drama-card {
-    border-radius: 22px;
-    padding: 14px 14px 18px 14px;
-    margin-bottom: 18px;
-    background: #ffffff;
-    border: 1px solid #e4e4e4;
-    display: flex;
-    transition: all 0.18s ease-out;
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
-}
+/* ====== 카드 / 포스터 ====== */
 
-.drama-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.16);
-    border-color: #ff6b6b;
+/* 카드 컨테이너 – 배경/테두리 제거, 포스터만 보이게 */
+.drama-card {
+    border-radius: 0;
+    padding: 0;
+    margin-bottom: 22px;
+    background: transparent;
+    border: none;
+    display: block;
 }
 
 /* 카드 전체 클릭 링크 스타일 제거 */
@@ -101,31 +95,41 @@ html, body, [class*="css"]  {
     display: block;
 }
 
-/* 포스터 래퍼 + 오버레이 구조 */
+/* 포스터 래퍼 + 오버레이 구조 (세로형 카드) */
 .poster-wrapper {
     position: relative;
     width: 100%;
+    max-width: 230px;           /* 세로 포스터 느낌으로 약간 슬림하게 */
+    margin: 0 auto;
 }
 
-/* 포스터 이미지 – 기본 비율 유지, 중앙 기준으로 꽉 채우기 */
+/* 포스터 이미지 – 세로 포스터 비율, 가운데 기준으로 꽉 채우기 */
 .drama-poster {
     width: 100%;
-    height: 260px;
-    border-radius: 16px;
-    object-fit: cover;              /* 작은 변에 맞추고 나머지는 잘라냄 */
-    object-position: center center;  /* 가운데 기준으로 자르기 */
+    aspect-ratio: 2 / 3;        /* 전형적인 세로 포스터 비율 */
+    border-radius: 18px;
+    object-fit: cover;          /* 작은 변에 맞추고 넘치는 부분 잘라냄 */
+    object-position: center center;
     border: 1px solid #dddddd;
     display: block;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.10);
+    transition: transform 0.18s ease-out, box-shadow 0.18s ease-out;
 }
 
-/* 정보 오버레이 – 기본은 숨김, hover 시 등장 */
+/* 호버 시 포스터 살짝 떠오르게 */
+.drama-card:hover .drama-poster {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.25);
+}
+
+/* 정보 오버레이 – 포스터 위에 검정 그라데이션 */
 .drama-overlay {
     position: absolute;
     inset: 0;
-    border-radius: 16px;
+    border-radius: 18px;
     background: linear-gradient(
         180deg,
-        rgba(0,0,0,0.35) 0%,
+        rgba(0,0,0,0.10) 0%,
         rgba(0,0,0,0.85) 100%
     );
     opacity: 0;
@@ -137,6 +141,7 @@ html, body, [class*="css"]  {
     box-sizing: border-box;
 }
 
+/* 마우스 올리면 오버레이 등장 */
 .drama-card:hover .drama-overlay {
     opacity: 1;
 }
@@ -155,14 +160,14 @@ html, body, [class*="css"]  {
     line-height: 1.4;
 }
 
-/* 해시태그 뱃지 – 오버레이용 흰 글씨 */
+/* 해시태그 뱃지 – 흰 글씨, 점 없이 */
 .tag-badge {
     display: inline-block;
     padding: 3px 7px;
     margin: 2px 4px 0 0;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.45);
     font-size: 11px;
     color: #ffffff;
 }
@@ -511,7 +516,7 @@ def render_list_view(df: pd.DataFrame, selected_ip: Optional[str]):
                 air_date = row.get("air_date", "")
                 main_cast = row.get("main_cast", "")
 
-                # 포스터 HTML
+                # 포스터 HTML (이제 이게 카드의 전부)
                 if poster_url:
                     poster_html = (
                         f'<img class="drama-poster" src="{poster_url}" alt="{ip_name} 포스터" />'
