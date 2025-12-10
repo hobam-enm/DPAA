@@ -4,7 +4,7 @@
 # region [1. Imports & 기본 설정]
 import re
 from typing import List, Optional
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 
 import pandas as pd
 import streamlit as st
@@ -23,15 +23,13 @@ st.set_page_config(
 # 시크릿에서 관리시트 URL 읽기
 ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
 
-# 뷰 모드 (리스트 / 상세)
+# 뷰 모드 (리스트 / 상세) – 쿼리파라미터 기반
 VIEW_MODE_LIST = "list"
 VIEW_MODE_DETAIL = "detail"
 
-if "view_mode" not in st.session_state:
-    st.session_state["view_mode"] = VIEW_MODE_LIST
-
-if "selected_ip" not in st.session_state:
-    st.session_state["selected_ip"] = None
+params = st.experimental_get_query_params()
+CURRENT_VIEW_MODE = params.get("view", [VIEW_MODE_LIST])[0]
+CURRENT_SELECTED_IP = params.get("ip", [None])[0]
 
 # endregion
 
@@ -66,9 +64,9 @@ html, body, [class*="css"]  {
 .drama-card {
     border-radius: 16px;
     padding: 10px 12px;
-    margin-bottom: 10px;
-    background: #111111;
-    border: 1px solid #262626;
+    margin-bottom: 14px;
+    background: #181818;               /* 조금 더 밝게 */
+    border: 1px solid #303030;
     display: flex;
     gap: 10px;
     transition: all 0.18s ease-out;
@@ -78,6 +76,12 @@ html, body, [class*="css"]  {
     transform: translateY(-2px);
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
     border-color: #ff6b6b;
+}
+
+/* 카드 전체 클릭 링크 스타일 제거 */
+.drama-card-link {
+    text-decoration: none;
+    color: inherit;
 }
 
 /* 포스터 이미지 */
@@ -101,11 +105,12 @@ html, body, [class*="css"]  {
     font-size: 15px;
     font-weight: 700;
     margin-bottom: 0.2rem;
+    color: #ffffff;
 }
 
 .drama-subtitle {
     font-size: 12px;
-    color: #bbbbbb;
+    color: #e0e0e0;
 }
 
 /* 해시태그 뱃지 */
@@ -115,28 +120,9 @@ html, body, [class*="css"]  {
     margin: 2px 4px 0 0;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     font-size: 11px;
     color: #ddd;
-}
-
-/* 버튼 커스터마이징 (모든 st.button 공통) */
-.stButton>button {
-    width: 100%;
-    border-radius: 999px;
-    border: 1px solid #ff6b6b;
-    background: #ffffff;
-    color: #111111;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 4px 0;
-    margin-top: 4px;
-    cursor: pointer;
-}
-
-.stButton>button:hover {
-    background: linear-gradient(90deg, #ff6b6b, #ff9f43);
-    color: #ffffff;
 }
 
 /* 선택된 IP 하이라이트 */
@@ -144,6 +130,16 @@ html, body, [class*="css"]  {
     font-size: 12px;
     font-weight: 600;
     color: #ff9f43;
+}
+
+/* 뒤로가기 링크 스타일 */
+.back-link {
+    font-size: 13px;
+    color: #ff6b6b;
+    text-decoration: none;
+}
+.back-link:hover {
+    text-decoration: underline;
 }
 </style>
 """
@@ -282,14 +278,11 @@ def parse_hashtags(tag_str: str) -> List[str]:
     """
     해시태그는 '#단위'로만 구분.
     예) "#로맨스#스릴러 #복수" → ['#로맨스', '#스릴러', '#복수']
-    (띄어쓰기는 무시하고, 문자열 안의 '#' 토큰만 추출)
     """
     if not isinstance(tag_str, str) or tag_str.strip() == "":
         return []
 
-    # '#무언가' 패턴을 전부 추출
     found = re.findall(r"#\S+", tag_str)
-    # 순서 유지 + 중복 제거
     seen = []
     for t in found:
         if t not in seen:
@@ -303,18 +296,13 @@ def collect_all_hashtags(df: pd.DataFrame) -> List[str]:
         if not isinstance(row_tags, list):
             continue
         tags.extend(row_tags)
-    # 유니크 + 정렬
     return sorted(set(tags))
 
 
 def build_embed_url(pres_url: str) -> Optional[str]:
     """
     Google Slides 편집 URL → embed URL로 변환.
-    예)
-      입력: https://docs.google.com/presentation/d/FILE_ID/edit?slide=...
-      출력: https://docs.google.com/presentation/d/FILE_ID/embed?start=false&loop=false&delayms=3000
-    (슬라이드 "범위 제한"은 Google Slides embed에서 기술적으로 막기 어렵기 때문에
-     여기서는 전체 장표를 임베딩하고, 범위는 안내용 메타로만 사용)
+    (슬라이드 범위 자체를 강제 제한하는 기능은 Slides embed에서 제공되지 않음)
     """
     if not isinstance(pres_url, str) or "docs.google.com/presentation" not in pres_url:
         return None
@@ -329,32 +317,6 @@ def build_embed_url(pres_url: str) -> Optional[str]:
         "start=false&loop=false&delayms=3000"
     )
     return embed_url
-
-
-def parse_slide_range_text(slide_range: str) -> tuple[Optional[int], Optional[int]]:
-    """
-    텍스트 '1-10' / '5' 형태를 (start, end) 튜플로 변환.
-    - '1-10' → (1, 10)
-    - '5'    → (5, 5)
-    - 이상하면 (None, None)
-    """
-    if not isinstance(slide_range, str):
-        return None, None
-
-    s = slide_range.strip()
-    if s == "":
-        return None, None
-
-    m = re.match(r"^(\d+)\s*-\s*(\d+)$", s)
-    if m:
-        return int(m.group(1)), int(m.group(2))
-
-    m = re.match(r"^(\d+)$", s)
-    if m:
-        v = int(m.group(1))
-        return v, v
-
-    return None, None
 
 
 def filter_archive(
@@ -395,26 +357,6 @@ def filter_archive(
 
     return temp.reset_index(drop=True)
 
-
-def ensure_session_selected_ip(df: pd.DataFrame):
-    """
-    session_state에 선택된 IP가 없다면, 현재 필터된 df의 첫 번째 IP를 선택.
-    """
-    if "selected_ip" not in st.session_state or st.session_state["selected_ip"] is None:
-        if not df.empty:
-            st.session_state["selected_ip"] = df.iloc[0]["ip_name"]
-        else:
-            st.session_state["selected_ip"] = None
-
-
-def select_ip(ip_name: str):
-    """
-    카드 버튼 클릭 시 호출해서 선택 IP를 세션에 저장하고,
-    상세 페이지(view_mode=detail)로 전환.
-    """
-    st.session_state["selected_ip"] = ip_name
-    st.session_state["view_mode"] = VIEW_MODE_DETAIL
-
 # endregion
 
 
@@ -447,10 +389,9 @@ def render_sidebar(df: pd.DataFrame):
 # endregion
 
 
-# region [6-A. 메인 레이아웃 - 리스트 페이지]
+# region [6-A. 리스트 페이지 (그리드 4열)]
 
-def render_list_view(filtered_df: pd.DataFrame):
-    """전체 리스트 페이지 (1컬럼 카드 나열)"""
+def render_list_view(filtered_df: pd.DataFrame, selected_ip: Optional[str]):
     st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="subtitle">드라마 마케팅 사전분석 리포트를 한 곳에 모은 아카이브입니다. '
@@ -464,76 +405,79 @@ def render_list_view(filtered_df: pd.DataFrame):
         st.info("조건에 맞는 드라마가 없습니다. 검색어 또는 해시태그를 변경해보세요.")
         return
 
-    for idx, row in filtered_df.iterrows():
-        ip_name = row.get("ip_name", "")
-        hashtags_list = row.get("hashtags_list", [])
-        poster_url = row.get("poster_url", "")
-        slide_range = row.get("slide_range", "")
+    n = len(filtered_df)
+    per_row = 4
 
-        if poster_url:
-            poster_html = (
-                f'<img class="drama-poster" src="{poster_url}" alt="{ip_name} 포스터" />'
-            )
-        else:
-            poster_html = (
-                '<div class="drama-poster" style="display:flex;align-items:center;'
-                'justify-content:center;font-size:10px;color:#555;background:#181818;">NO IMAGE</div>'
-            )
+    for row_start in range(0, n, per_row):
+        cols = st.columns(per_row)
+        for i in range(per_row):
+            idx = row_start + i
+            with cols[i]:
+                if idx >= n:
+                    st.empty()
+                    continue
 
-        tags_html = " ".join(
-            f'<span class="tag-badge">{t}</span>' for t in hashtags_list
-        )
+                row = filtered_df.iloc[idx]
+                ip_name = row.get("ip_name", "")
+                hashtags_list = row.get("hashtags_list", [])
+                poster_url = row.get("poster_url", "")
+                slide_range = row.get("slide_range", "")
 
-        slide_html = ""
-        if slide_range:
-            slide_html = f'<div class="drama-subtitle">📑 노출 장표: {slide_range}</div>'
+                if poster_url:
+                    poster_html = (
+                        f'<img class="drama-poster" src="{poster_url}" alt="{ip_name} 포스터" />'
+                    )
+                else:
+                    poster_html = (
+                        '<div class="drama-poster" style="display:flex;align-items:center;'
+                        'justify-content:center;font-size:10px;color:#555;background:#181818;">NO IMAGE</div>'
+                    )
 
-        selected_label = ""
-        if st.session_state.get("selected_ip") == ip_name:
-            selected_label = '<span class="selected-label">선택됨</span>'
+                tags_html = " ".join(
+                    f'<span class="tag-badge">{t}</span>' for t in hashtags_list
+                )
 
-        card_html = f"""
-        <div class="drama-card">
-            {poster_html}
-            <div class="drama-meta">
-                <div>
-                    <div class="drama-title">{ip_name} {selected_label}</div>
-                    {slide_html}
-                </div>
-                <div>{tags_html}</div>
-            </div>
-        </div>
-        """
+                slide_html = ""
+                if slide_range:
+                    slide_html = f'<div class="drama-subtitle">📑 노출 장표: {slide_range}</div>'
 
-        st.markdown(card_html, unsafe_allow_html=True)
+                selected_label = ""
+                if selected_ip and selected_ip == ip_name:
+                    selected_label = '<span class="selected-label">선택됨</span>'
 
-        btn_key = f"open_{idx}_{ip_name}"
-        if st.button("리포트 열기", key=btn_key):
-            select_ip(ip_name)
-            st.experimental_rerun()
+                link = f"?view={VIEW_MODE_DETAIL}&ip={quote(ip_name)}"
+
+                card_html = f"""
+                <a href="{link}" class="drama-card-link">
+                    <div class="drama-card">
+                        {poster_html}
+                        <div class="drama-meta">
+                            <div>
+                                <div class="drama-title">{ip_name} {selected_label}</div>
+                                {slide_html}
+                            </div>
+                            <div>{tags_html}</div>
+                        </div>
+                    </div>
+                </a>
+                """
+
+                st.markdown(card_html, unsafe_allow_html=True)
 
 # endregion
 
 
-# region [6-B. 상세 페이지 - 리포트 뷰어]
+# region [6-B. 상세 페이지]
 
-def render_detail_view(df: pd.DataFrame):
-    """선택된 IP의 상세 리포트 페이지"""
-    selected_ip = st.session_state.get("selected_ip")
-
-    # 상단 타이틀 & 뒤로가기 버튼
+def render_detail_view(df: pd.DataFrame, selected_ip: str):
     st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
 
-    col_back, col_title = st.columns([0.2, 0.8])
-    with col_back:
-        if st.button("← 드라마 리스트로 돌아가기"):
-            st.session_state["view_mode"] = VIEW_MODE_LIST
-            st.experimental_rerun()
-    with col_title:
-        st.markdown(
-            '<div class="subtitle">선택한 작품의 사전분석 리포트를 확인할 수 있습니다.</div>',
-            unsafe_allow_html=True,
-        )
+    # 뒤로가기 링크
+    st.markdown(
+        '<a href="?" class="back-link">← 드라마 리스트로 돌아가기</a>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("")  # 간격
 
     if not selected_ip:
         st.info("선택된 드라마가 없습니다. 먼저 리스트에서 드라마를 선택해 주세요.")
@@ -554,11 +498,7 @@ def render_detail_view(df: pd.DataFrame):
         f'<span class="tag-badge">{t}</span>' for t in hashtags_list
     )
 
-    start_page, end_page = parse_slide_range_text(slide_range)
-    if start_page is not None and end_page is not None:
-        range_text = f"{start_page}–{end_page}p"
-    else:
-        range_text = "전체 장표"
+    range_text = slide_range if slide_range else "전체 장표"
 
     st.markdown(
         f"""
@@ -598,13 +538,10 @@ def main():
         selected_tags=selected_tags,
     )
 
-    ensure_session_selected_ip(filtered_df)
-
-    # 뷰 모드에 따라 다른 페이지 렌더링
-    if st.session_state.get("view_mode") == VIEW_MODE_DETAIL:
-        render_detail_view(df)
+    if CURRENT_VIEW_MODE == VIEW_MODE_DETAIL and CURRENT_SELECTED_IP:
+        render_detail_view(df, CURRENT_SELECTED_IP)
     else:
-        render_list_view(filtered_df)
+        render_list_view(filtered_df, CURRENT_SELECTED_IP)
 
 
 if __name__ == "__main__":
