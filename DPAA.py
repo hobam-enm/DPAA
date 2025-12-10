@@ -296,7 +296,7 @@ def render_header(df):
     st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="subtitle">드라마 마케팅 사전분석 리포트를 한 곳에 모은 아카이브입니다.<br>'
-        'IP별 기획 방향성과 인사이트를 빠르게 찾아보세요.</div>',
+        'IP별 디지털 마케팅 기획 방향성과 인사이트를 빠르게 찾아보세요.</div>',
         unsafe_allow_html=True,
     )
     
