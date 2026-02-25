@@ -1,21 +1,38 @@
 
 # -*- coding: utf-8 -*-
-# 🎬 드라마 인사이트 아카이브 v2
+# 🎬 드라마 인사이트 아카이브 v3 – 썸네일 방식 (페이지 범위 완전 차단 버전)
 #
-# - 홈: 월간 리포트 / 배우·장르 리포트 선택
-# - 배우·장르 리포트: 관리 시트 기반 리스트 + 슬라이드 임베드
-# - admin 모드(?view=actor_genre&admin=1): 배우·장르 분석 슬라이드 동기화 버튼 노출
+# - Google Drive 파일 복사 X (용량/쿼터 이슈 회피)
+# - Google Slides API로 각 페이지를 썸네일 이미지로 받아와서 표시
+#   → 관리 시트 I열 / J열에 적은 "2-3" 범위만 물리적으로 보여줌
+#   → 그 외 슬라이드는 앱 화면에서 전혀 노출되지 않음
 #
-# secrets.toml 예시
-# ---------------------------------
+# 📌 전제
+# 1) secrets.toml 에 아래 값이 설정되어 있음
+#
 # ARCHIVE_SHEET_URL = "https://docs.google.com/spreadsheets/d/스프레드시트ID/edit?gid=0#gid=0"
 #
 # [google_api]
-# service_account_json = """{ ...서비스 계정 JSON... }"""
-# sheet_id = "스프레드시트ID"
-# sheet_name = "시트탭이름"   # 생략 시 첫 번째 시트 사용
-# folder_id = "결과 프레젠테이션 저장용 폴더 ID"
-# ---------------------------------
+# service_account_json = """{ ... GCP 서비스계정 JSON ... }"""
+#
+# 2) 서비스계정 이메일을
+#    - 관리 시트
+#    - 슬라이드 파일
+#    에 "보기 권한" 이상으로 공유
+#
+# 3) requirements.txt 에 추가
+#    google-api-python-client
+#    google-auth
+#    google-auth-httplib2
+#
+# 📌 동작 요약
+# - 리스트 페이지: 기존과 동일 (배우/장르 분석 카드 목록)
+# - 상세 페이지:
+#   1) 프레젠테이션 ID 추출
+#   2) Slides API로 전체 슬라이드 리스트(objectId) 가져옴
+#   3) I/J열 범위(예: "2-3") → [2,3] → 인덱스로 objectId 선택
+#   4) 각 슬라이드에 대해 thumbnail URL 요청
+#   5) 해당 이미지들만 렌더링 (다른 페이지는 전혀 표시 안 함)
 
 import json
 import re
@@ -24,19 +41,9 @@ from urllib.parse import urlparse, parse_qs
 
 import pandas as pd
 import streamlit as st
-from streamlit.components.v1 import iframe as st_iframe
-
-# ─────────────────────────────────────────────────────────────
-# Google API (옵션)
-# ─────────────────────────────────────────────────────────────
-GOOGLE_API_AVAILABLE = False
-try:
-    from google.oauth2 import service_account
-    from googleapiclient.discovery import build
-
-    GOOGLE_API_AVAILABLE = True
-except Exception:
-    GOOGLE_API_AVAILABLE = False
+from streamlit.components.v1 import iframe as st_iframe  # 여전히 예비용
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 # ─────────────────────────────────────────────────────────────
 # 기본 설정 & 스타일
@@ -213,10 +220,12 @@ html, body, [class*="css"]  {
     background: #000;
     border: 1px solid #333;
     box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+    margin-bottom: 18px;
 }
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
 
 # ─────────────────────────────────────────────────────────────
 # 쿼리 파라미터
@@ -224,9 +233,9 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 params = st.query_params
 VIEW = params.get("view", "home")
 ROW_ID = params.get("id", None)
-ADMIN_FLAG = params.get("admin", "0")
 
 ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
+
 
 # ─────────────────────────────────────────────────────────────
 # 데이터 로딩
@@ -288,7 +297,7 @@ def load_archive_df() -> pd.DataFrame:
         "장르분석 페이지범위": "genre_range",
         "장르분석 페이지 범위": "genre_range",
 
-        # 결과 URL
+        # 선택적으로 존재할 수 있는 URL 컬럼
         "배우분석 URL": "actor_url",
         "장르분석 URL": "genre_url",
         "배우분석URL": "actor_url",
@@ -318,51 +327,78 @@ def load_archive_df() -> pd.DataFrame:
     df["row_id"] = df.index.astype(str)
     return df
 
+
 # ─────────────────────────────────────────────────────────────
-# Google API 유틸
+# Google Slides API – 서비스 계정 인증 & 썸네일
 # ─────────────────────────────────────────────────────────────
-def get_google_services():
-    gconf = st.secrets.get("google_api", None)
-    if not gconf:
-        raise RuntimeError("google_api 설정이 없습니다.")
-
-    info_str = gconf.get("service_account_json", "")
-    spreadsheet_id = gconf.get("sheet_id", "")
-    sheet_name = gconf.get("sheet_name", "")
-    folder_id = gconf.get("folder_id", "")
-
-    if not info_str or not spreadsheet_id or not folder_id:
-        raise RuntimeError("google_api 설정값(sheet_id, folder_id 등)을 확인하세요.")
-
-    creds = service_account.Credentials.from_service_account_info(
-        json.loads(info_str),
-        scopes=[
-            "https://www.googleapis.com/auth/drive",
-            "https://www.googleapis.com/auth/presentations",
-            "https://www.googleapis.com/auth/spreadsheets",
-        ],
-    )
-
-    drive = build("drive", "v3", credentials=creds)
-    slides = build("slides", "v1", credentials=creds)
-    sheets = build("sheets", "v4", credentials=creds)
-
-    # sheet_name 이 비어 있으면 첫 시트 이름으로 대체
-    if not sheet_name:
-        meta = sheets.spreadsheets().get(
-            spreadsheetId=spreadsheet_id,
-            fields="sheets(properties(title))",
-        ).execute()
-        sheet_name = meta["sheets"][0]["properties"]["title"]
-
-    return drive, slides, sheets, spreadsheet_id, sheet_name, folder_id
+SLIDES_SCOPES = ["https://www.googleapis.com/auth/presentations.readonly"]
 
 
-def extract_file_id(url: str) -> str:
-    m = re.search(r"/d/([^/]+)/", url)
-    return m.group(1) if m else ""
+@st.cache_resource(show_spinner=False)
+def get_slides_service():
+    google_api_conf = st.secrets.get("google_api", {})
+    info_str = google_api_conf.get("service_account_json", "")
+    if not info_str:
+        return None
+    try:
+        info = json.loads(info_str)
+        creds = service_account.Credentials.from_service_account_info(
+            info,
+            scopes=SLIDES_SCOPES,
+        )
+        service = build("slides", "v1", credentials=creds, cache_discovery=False)
+        return service
+    except Exception as e:
+        st.warning(f"Slides API 초기화 실패: {e}")
+        return None
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def get_presentation_page_ids(presentation_id: str) -> List[str]:
+    """
+    프레젠테이션 내 슬라이드들의 pageObjectId 리스트를 순서대로 가져옴.
+    """
+    service = get_slides_service()
+    if service is None:
+        return []
+    try:
+        pres = service.presentations().get(presentationId=presentation_id).execute()
+        slides = pres.get("slides", [])
+        page_ids = [s.get("objectId") for s in slides if s.get("objectId")]
+        return page_ids
+    except Exception as e:
+        st.warning(f"프레젠테이션 메타 로딩 실패: {e}")
+        return []
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_slide_thumbnail_url(presentation_id: str, page_object_id: str) -> Optional[str]:
+    """
+    특정 슬라이드(pageObjectId)에 대한 썸네일 이미지 URL 반환.
+    """
+    service = get_slides_service()
+    if service is None:
+        return None
+    try:
+        resp = (
+            service.presentations()
+            .pages()
+            .getThumbnail(
+                presentationId=presentation_id,
+                pageObjectId=page_object_id,
+                thumbnailProperties_thumbnailSize="LARGE",
+            )
+            .execute()
+        )
+        return resp.get("contentUrl")
+    except Exception as e:
+        st.warning(f"썸네일 로딩 실패: {e}")
+        return None
+
+
+# ─────────────────────────────────────────────────────────────
+# 유틸 – 슬라이드 ID, 페이지 범위 파싱
+# ─────────────────────────────────────────────────────────────
 def parse_page_range(page_range: str) -> List[int]:
     page_range = (page_range or "").strip()
     if not page_range:
@@ -379,106 +415,42 @@ def parse_page_range(page_range: str) -> List[int]:
     return []
 
 
-def create_sub_presentation(
-    drive,
-    slides,
-    src_file_id: str,
-    new_name: str,
-    keep_pages: List[int],
-    folder_id: str,
-) -> str:
-    copied = drive.files().copy(
-        fileId=src_file_id,
-        body={"name": new_name, "parents": [folder_id]},
-    ).execute()
-    new_file_id = copied["id"]
-
-    pres = slides.presentations().get(presentationId=new_file_id).execute()
-    slides_list = pres.get("slides", [])
-    keep_indices = {p - 1 for p in keep_pages if 1 <= p <= len(slides_list)}
-
-    requests = []
-    for idx, slide in enumerate(slides_list):
-        if idx not in keep_indices:
-            requests.append({"deleteObject": {"objectId": slide["objectId"]}})
-
-    if requests:
-        slides.presentations().batchUpdate(
-            presentationId=new_file_id,
-            body={"requests": requests},
-        ).execute()
-
-    return f"https://docs.google.com/presentation/d/{new_file_id}/edit"
+def extract_presentation_id(url: str) -> Optional[str]:
+    if not url or "docs.google.com/presentation" not in url:
+        return None
+    m = re.search(r"/d/([^/]+)/", url)
+    if not m:
+        return None
+    return m.group(1)
 
 
-def sync_actor_genre_presentations() -> int:
-    if not GOOGLE_API_AVAILABLE:
-        raise RuntimeError(
-            "google-api-python-client / google-auth 라이브러리가 설치되어 있지 않습니다."
-        )
+def build_embed_url_if_possible(url: str, page_range: str = "") -> str:
+    """
+    Slides API 사용이 불가능할 때를 위한 fallback.
+    - Google Slides URL이면 embed 링크로 변환 + 첫 페이지부터 시작
+    - PDF면 /preview
+    - 기타는 그대로
+    """
+    if not url:
+        return ""
+    is_pdf = url.lower().endswith(".pdf") or "/file/d/" in url
+    if is_pdf:
+        if "/preview" in url:
+            return url
+        return url.replace("/view", "/preview")
 
-    drive, slides, sheets, spreadsheet_id, sheet_name, folder_id = get_google_services()
+    if "docs.google.com/presentation" in url:
+        pres_id = extract_presentation_id(url)
+        if not pres_id:
+            return url
+        base = f"https://docs.google.com/presentation/d/{pres_id}/embed?start=false&loop=false&delayms=60000"
+        pages = parse_page_range(page_range)
+        if pages:
+            base += f"&slide=id.p{pages[0]}"
+        return base
 
-    read_range = f"{sheet_name}!A2:L"
-    resp = sheets.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id,
-        range=read_range,
-    ).execute()
-    rows = resp.get("values", [])
-    if not rows:
-        return 0
+    return url
 
-    updated = 0
-    new_values = []
-
-    for row in rows:
-        while len(row) < 12:
-            row.append("")
-
-        url = str(row[1]).strip()          # B: 프레젠테이션주소
-        actor_range = str(row[8]).strip()  # I: 배우분석
-        genre_range = str(row[9]).strip()  # J: 장르분석
-        actor_url = str(row[10]).strip()   # K: 배우분석 URL
-        genre_url = str(row[11]).strip()   # L: 장르분석 URL
-
-        file_id = extract_file_id(url)
-        if not file_id:
-            new_values.append(row)
-            continue
-
-        base_name = row[0] if row[0] else "분석"
-
-        if actor_range and not actor_url:
-            pages = parse_page_range(actor_range)
-            if pages:
-                new_name = f"{base_name}_배우분석"
-                actor_url = create_sub_presentation(
-                    drive, slides, file_id, new_name, pages, folder_id
-                )
-                row[10] = actor_url
-                updated += 1
-
-        if genre_range and not genre_url:
-            pages = parse_page_range(genre_range)
-            if pages:
-                new_name = f"{base_name}_장르분석"
-                genre_url = create_sub_presentation(
-                    drive, slides, file_id, new_name, pages, folder_id
-                )
-                row[11] = genre_url
-                updated += 1
-
-        new_values.append(row)
-
-    sheets.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id,
-        range=read_range,
-        valueInputOption="RAW",
-        body={"values": new_values},
-    ).execute()
-
-    load_archive_df.clear()
-    return updated
 
 # ─────────────────────────────────────────────────────────────
 # 렌더링 – 홈 / 월간 / 배우·장르 리스트 / 상세
@@ -533,27 +505,73 @@ def render_monthly_stub():
     st.info("월간 리포트 페이지 구성은 추후 설계 예정입니다.")
 
 
-def _build_embed_url_from_slide_url(url: str, page_range: str = "") -> str:
-    if not url:
-        return ""
-    is_pdf = url.lower().endswith(".pdf") or "/file/d/" in url
-    if is_pdf:
-        if "/preview" in url:
-            return url
-        return url.replace("/view", "/preview")
+def render_slide_range_as_thumbnails(target_url: str, page_range: str):
+    """
+    핵심 함수:
+    - target_url 에서 프레젠테이션 ID 추출
+    - page_range(예: "2-3") 기준으로 해당 페이지들만 썸네일로 렌더링
+    - Slides API 사용 불가 시 iframe embed로 fallback
+    """
+    pres_id = extract_presentation_id(target_url)
+    if not pres_id:
+        # Slides URL이 아니면 그냥 embed
+        embed_url = build_embed_url_if_possible(target_url, page_range)
+        if not embed_url:
+            st.warning("연결된 프레젠테이션 링크가 없습니다.")
+            return
+        st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
+        st_iframe(embed_url, height=800, scrolling=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
 
-    if "docs.google.com/presentation" in url:
-        m = re.search(r"/d/([^/]+)/", url)
-        if not m:
-            return url
-        file_id = m.group(1)
-        base = f"https://docs.google.com/presentation/d/{file_id}/embed?start=false&loop=false&delayms=60000"
-        pages = parse_page_range(page_range)
-        if pages:
-            base += f"&slide=id.p{pages[0]}"
-        return base
+    # 페이지 범위 파싱
+    pages = parse_page_range(page_range)
+    if not pages:
+        # 범위 명시가 없으면 전체를 embed로 fallback
+        embed_url = build_embed_url_if_possible(target_url, page_range)
+        if not embed_url:
+            st.warning("페이지 범위가 설정되지 않았고, 프레젠테이션을 불러올 수 없습니다.")
+            return
+        st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
+        st_iframe(embed_url, height=800, scrolling=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
 
-    return url
+    # Slides API로 pageObjectId 리스트 가져오기
+    page_ids = get_presentation_page_ids(pres_id)
+    if not page_ids:
+        # 메타를 못 가져오면 embed fallback
+        embed_url = build_embed_url_if_possible(target_url, page_range)
+        if not embed_url:
+            st.warning("프레젠테이션 정보를 불러오지 못했습니다.")
+            return
+    else:
+        # 요청한 범위 내에서만 썸네일 렌더링
+        rendered_any = False
+        for p in pages:
+            idx = p - 1
+            if 0 <= idx < len(page_ids):
+                page_obj_id = page_ids[idx]
+                thumb_url = get_slide_thumbnail_url(pres_id, page_obj_id)
+                if thumb_url:
+                    rendered_any = True
+                    st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<img src="{thumb_url}" style="width:100%;display:block;">',
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown("</div>", unsafe_allow_html=True)
+        if rendered_any:
+            return
+
+        # 여기까지 왔는데도 아무것도 못 그렸다면 embed fallback
+        embed_url = build_embed_url_if_possible(target_url, page_range)
+        if embed_url:
+            st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
+            st_iframe(embed_url, height=800, scrolling=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.warning("해당 페이지 범위를 렌더링할 수 없습니다.")
 
 
 def render_actor_detail(df: pd.DataFrame, row_id: str):
@@ -587,14 +605,7 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
     target_url = row.get("actor_url") or row.get("url")
     page_range = row.get("actor_range", "")
 
-    embed_url = _build_embed_url_from_slide_url(target_url, page_range)
-    if not embed_url:
-        st.warning("연결된 프레젠테이션 링크가 없습니다.")
-        return
-
-    st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
-    st_iframe(embed_url, height=800, scrolling=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    render_slide_range_as_thumbnails(target_url, page_range)
 
 
 def render_genre_detail(df: pd.DataFrame, row_id: str):
@@ -627,14 +638,7 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
     target_url = row.get("genre_url") or row.get("url")
     page_range = row.get("genre_range", "")
 
-    embed_url = _build_embed_url_from_slide_url(target_url, page_range)
-    if not embed_url:
-        st.warning("연결된 프레젠테이션 링크가 없습니다.")
-        return
-
-    st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
-    st_iframe(embed_url, height=800, scrolling=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    render_slide_range_as_thumbnails(target_url, page_range)
 
 
 def render_actor_genre_list(df: pd.DataFrame):
@@ -649,30 +653,12 @@ def render_actor_genre_list(df: pd.DataFrame):
     st.markdown(
         """
         <div class="detail-subtitle">
-        한 작품의 슬라이드 중, 배우 분석/장르 분석에 해당하는 페이지만 따로 모아둔 리포트입니다.<br>
+        한 작품의 슬라이드 중, 배우 분석/장르 분석에 해당하는 페이지만 따로 모아본 리포트입니다.<br>
         아래 탭에서 유형을 선택하고, 카드 클릭 시 해당 분석 슬라이드가 열립니다.
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-    # admin=1 이고 google_api 섹션이 있으면 동기화 버튼 노출
-    admin_mode = ADMIN_FLAG == "1" and "google_api" in st.secrets
-
-    if admin_mode:
-        if not GOOGLE_API_AVAILABLE:
-            st.warning(
-                "google-api-python-client / google-auth 라이브러리가 설치되지 않아 "
-                "동기화 기능을 쓸 수 없습니다."
-            )
-        else:
-            if st.button("배우/장르 분석 슬라이드 동기화 실행", type="secondary"):
-                try:
-                    with st.spinner("슬라이드 동기화 중..."):
-                        cnt = sync_actor_genre_presentations()
-                    st.success(f"{cnt}개 행에 대해 분석 프레젠테이션을 생성/갱신했습니다.")
-                except Exception as e:
-                    st.error(f"동기화 중 오류: {e}")
 
     tab_actor, tab_genre = st.tabs(["배우 분석", "장르 분석"])
 
@@ -734,6 +720,7 @@ def render_actor_genre_list(df: pd.DataFrame):
                     """,
                     unsafe_allow_html=True,
                 )
+
 
 # ─────────────────────────────────────────────────────────────
 # main
