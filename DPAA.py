@@ -498,9 +498,9 @@ def render_home():
         unsafe_allow_html=True,
     )
 
-    base = st.get_query_params()
-    # 홈 진입 시 불필요한 query param 제거
-    base.clear()
+    # ❌ base = st.get_query_params()
+    # ❌ base.clear()
+    # 쿼리 파라미터를 굳이 건드릴 필요 없음. 아래에서 직접 ?view=... 로 링크를 만든다.
 
     monthly_link = "?view=monthly"
     actor_link = "?view=actor_genre"
@@ -528,7 +528,6 @@ def render_home():
         """,
         unsafe_allow_html=True,
     )
-
 
 def render_monthly_stub():
     st.markdown(
