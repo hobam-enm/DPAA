@@ -1,5 +1,21 @@
+
 # -*- coding: utf-8 -*-
 # 🎬 드라마 인사이트 아카이브 v2
+#
+# - 홈: 월간 리포트 / 배우·장르 리포트 선택
+# - 배우·장르 리포트: 관리 시트 기반 리스트 + 슬라이드 임베드
+# - admin 모드(?view=actor_genre&admin=1): 배우·장르 분석 슬라이드 동기화 버튼 노출
+#
+# secrets.toml 예시
+# ---------------------------------
+# ARCHIVE_SHEET_URL = "https://docs.google.com/spreadsheets/d/스프레드시트ID/edit?gid=0#gid=0"
+#
+# [google_api]
+# service_account_json = """{ ...서비스 계정 JSON... }"""
+# sheet_id = "스프레드시트ID"
+# sheet_name = "시트탭이름"   # 생략 시 첫 번째 시트 사용
+# folder_id = "결과 프레젠테이션 저장용 폴더 ID"
+# ---------------------------------
 
 import json
 import re
@@ -235,6 +251,7 @@ def load_archive_df() -> pd.DataFrame:
     except Exception:
         return pd.DataFrame()
 
+    # 헤더 매핑
     col_map = {
         "IP": "ip",
         "IP명": "ip",
@@ -310,8 +327,8 @@ def get_google_services():
         raise RuntimeError("google_api 설정이 없습니다.")
 
     info_str = gconf.get("service_account_json", "")
-    spreadsheet_id = gconf.get("sheet_id", "")  # 🔹 TOML 에 맞춤
-    sheet_name = gconf.get("sheet_name", "")    # 없으면 첫 시트 사용
+    spreadsheet_id = gconf.get("sheet_id", "")
+    sheet_name = gconf.get("sheet_name", "")
     folder_id = gconf.get("folder_id", "")
 
     if not info_str or not spreadsheet_id or not folder_id:
@@ -362,11 +379,14 @@ def parse_page_range(page_range: str) -> List[int]:
     return []
 
 
-def create_sub_presentation(drive, slides,
-                            src_file_id: str,
-                            new_name: str,
-                            keep_pages: List[int],
-                            folder_id: str) -> str:
+def create_sub_presentation(
+    drive,
+    slides,
+    src_file_id: str,
+    new_name: str,
+    keep_pages: List[int],
+    folder_id: str,
+) -> str:
     copied = drive.files().copy(
         fileId=src_file_id,
         body={"name": new_name, "parents": [folder_id]},
@@ -393,7 +413,9 @@ def create_sub_presentation(drive, slides,
 
 def sync_actor_genre_presentations() -> int:
     if not GOOGLE_API_AVAILABLE:
-        raise RuntimeError("google-api-python-client / google-auth 라이브러리가 설치되어 있지 않습니다.")
+        raise RuntimeError(
+            "google-api-python-client / google-auth 라이브러리가 설치되어 있지 않습니다."
+        )
 
     drive, slides, sheets, spreadsheet_id, sheet_name, folder_id = get_google_services()
 
@@ -479,14 +501,14 @@ def render_home():
     st.markdown(
         f"""
         <div class="home-grid">
-          <a href="{monthly_link}" class="home-card">
+          <a href="{monthly_link}" target="_self" class="home-card">
             <div class="home-card-tag">MONTHLY</div>
             <div class="home-card-title">월간 드라마 인사이트 리포트</div>
             <div class="home-card-desc">
               월 단위로 정리한 시장 인사이트, 핵심 작품, 시청자 반응 변화를 다룬 리포트입니다.
             </div>
           </a>
-          <a href="{actor_link}" class="home-card">
+          <a href="{actor_link}" target="_self" class="home-card">
             <div class="home-card-tag">CAST / GENRE</div>
             <div class="home-card-title">배우 / 장르 분석 리포트</div>
             <div class="home-card-desc">
@@ -634,12 +656,15 @@ def render_actor_genre_list(df: pd.DataFrame):
         unsafe_allow_html=True,
     )
 
-    # 🔹 admin=1 이고 google_api 섹션이 있으면 버튼 노출
+    # admin=1 이고 google_api 섹션이 있으면 동기화 버튼 노출
     admin_mode = ADMIN_FLAG == "1" and "google_api" in st.secrets
 
     if admin_mode:
         if not GOOGLE_API_AVAILABLE:
-            st.warning("google-api-python-client / google-auth 라이브러리가 설치되지 않아 동기화 기능을 쓸 수 없습니다.")
+            st.warning(
+                "google-api-python-client / google-auth 라이브러리가 설치되지 않아 "
+                "동기화 기능을 쓸 수 없습니다."
+            )
         else:
             if st.button("배우/장르 분석 슬라이드 동기화 실행", type="secondary"):
                 try:
