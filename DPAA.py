@@ -77,7 +77,7 @@ html, body, [class*="css"]  {
 }
 .home-card {
     position: relative;
-    height: 500px;
+    height: 600px;
     padding: 40px;
     border-radius: 24px;
     border: 1px solid #e0e0e0;
