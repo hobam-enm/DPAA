@@ -1,5 +1,7 @@
 import json
 import re
+import base64
+import io
 from typing import List, Optional
 from urllib.parse import urlparse, parse_qs
 
@@ -8,6 +10,7 @@ import streamlit as st
 from streamlit.components.v1 import iframe as st_iframe
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 
 # ─────────────────────────────────────────────────────────────
 # 기본 설정 & 스타일
@@ -144,7 +147,7 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     border-color: #ff7a50;
 }
 
-/* 썸네일 강제 확대 (여백 자르기) 유지 */
+/* 썸네일 강제 확대 (10%로 축소) */
 .monthly-thumb-box {
     width: 100%;
     aspect-ratio: 16 / 9;
@@ -155,11 +158,11 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     width: 100%;
     height: 100%;
     object-fit: cover; 
-    transform: scale(1.15);
+    transform: scale(1.10); /* 요청하신 1.10 적용 */
     transition: transform 0.3s ease;
 }
 .monthly-card:hover .monthly-thumb {
-    transform: scale(1.20);
+    transform: scale(1.15); /* 마우스 오버 시 살짝만 더 줌인 */
 }
 
 .monthly-info {
@@ -258,7 +261,7 @@ a.analysis-card {
     line-height: 1.6;
 }
 
-/* 일반 임베드 컨테이너 */
+/* 슬라이드 썸네일 전용 임베드 컨테이너 */
 .embed-container {
     position: relative;
     width: 100%;
@@ -279,22 +282,21 @@ a.analysis-card {
     border: 0;
 }
 
-/* ===== 수정: PDF 전용 뷰어 컨테이너 (위아래 잘림 방지) ===== */
-.pdf-embed-container {
-    position: relative;
+/* 순정 PDF 뷰어 전용 컨테이너 (깔끔한 테두리와 높이) */
+.pdf-native-container {
     width: 100%;
-    height: 85vh; /* 비율 강제 고정 대신 화면 높이에 맞춰 길게 뻗도록 변경 */
+    height: 85vh; /* 화면 높이에 맞춰 시원하게 출력 */
     border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-    background: #1e1e1e;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    background: #f5f5f5;
     border: 1px solid #eaeaea;
     margin-bottom: 18px;
+    overflow: hidden;
 }
-.pdf-embed-container iframe {
+.pdf-native-container iframe {
     width: 100%;
     height: 100%;
     border: 0;
-    /* transform: scale(1.18); <- 위아래 잘리는 주범 삭제! */
 }
 </style>
 """
@@ -464,6 +466,26 @@ def get_drive_thumbnail_url(file_id: str) -> Optional[str]:
     except Exception as e:
         return None
 
+# ===== 추가: 드라이브에서 PDF 파일을 바이트로 다운받아 Base64로 인코딩 =====
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_drive_pdf_base64(file_id: str) -> Optional[str]:
+    """
+    Drive API를 사용해 PDF 원본 파일을 다운로드하고 Base64 문자열로 반환합니다.
+    """
+    service = get_drive_service()
+    if service is None: return None
+    try:
+        request = service.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+        return base64.b64encode(fh.getvalue()).decode('utf-8')
+    except Exception as e:
+        st.error(f"PDF 파일 다운로드 실패: {e}")
+        return None
+
 
 # ─────────────────────────────────────────────────────────────
 # 유틸 – URL 파싱 및 임베드
@@ -580,6 +602,7 @@ def render_monthly_list(df_monthly: pd.DataFrame):
     cols_html.append("</div>")
     st.markdown("".join(cols_html), unsafe_allow_html=True)
 
+# ===== 핵심 수정: PDF Base64 순정 뷰어 랜더링 =====
 def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     row = df_monthly[df_monthly["row_id"] == row_id]
     if row.empty:
@@ -596,15 +619,34 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     st.markdown(f'<div class="detail-title">{title}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="detail-subtitle">발행시점 : {date}</div>', unsafe_allow_html=True)
 
-    embed_url = build_embed_url_if_possible(url)
-    if embed_url:
-        st.markdown(f"""
-        <div class="pdf-embed-container">
-            <iframe src="{embed_url}" allowfullscreen="true"></iframe>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.warning("PDF를 불러올 수 없습니다. 올바른 구글 드라이브 링크인지 확인해 주세요.")
+    file_id = extract_drive_file_id(url)
+    rendered_native = False
+
+    if file_id:
+        with st.spinner("🚀 고화질 PDF 문서를 다이렉트로 불러오고 있습니다... (약 2~3초 소요)"):
+            b64_pdf = get_drive_pdf_base64(file_id)
+            if b64_pdf:
+                # #view=FitH 파라미터를 추가하여 브라우저가 자동으로 가로폭에 꽉 맞게(시원하게) 렌더링하게 함
+                pdf_html = f'''
+                <div class="pdf-native-container">
+                    <iframe src="data:application/pdf;base64,{b64_pdf}#view=FitH&toolbar=0&navpanes=0"></iframe>
+                </div>
+                '''
+                st.markdown(pdf_html, unsafe_allow_html=True)
+                rendered_native = True
+
+    # 혹시라도 파일 용량이 너무 커서 다운로드에 실패했을 경우를 위한 안전망 (기존 프리뷰)
+    if not rendered_native:
+        embed_url = build_embed_url_if_possible(url)
+        if embed_url:
+            st.warning("⚠️ 구글 드라이브 기본 뷰어로 렌더링합니다.")
+            st.markdown(f"""
+            <div class="pdf-native-container">
+                <iframe src="{embed_url}" allowfullscreen="true"></iframe>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.error("PDF를 불러올 수 없습니다. 올바른 구글 드라이브 링크인지 확인해 주세요.")
 
 def render_slide_range_as_thumbnails(target_url: str, page_range: str):
     pres_id = extract_presentation_id(target_url)
