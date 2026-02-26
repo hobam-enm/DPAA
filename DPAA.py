@@ -40,7 +40,6 @@ section[data-testid="stSidebar"] {display:none !important;}
 """
 st.markdown(HIDE_UI, unsafe_allow_html=True)
 
-# ===== CSS 대폭 수정: 강제 확대(Scale) 트릭 적용 =====
 CUSTOM_CSS = """
 <style>
 html, body, [class*="css"]  {
@@ -145,22 +144,22 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     border-color: #ff7a50;
 }
 
-/* 썸네일 강제 확대 (여백 자르기) */
+/* 썸네일 강제 확대 (여백 자르기) 유지 */
 .monthly-thumb-box {
     width: 100%;
     aspect-ratio: 16 / 9;
-    overflow: hidden; /* 확대된 부분이 카드 밖으로 나가지 않게 자름 */
+    overflow: hidden;
     border-bottom: 1px solid #eaeaea;
 }
 .monthly-thumb {
     width: 100%;
     height: 100%;
     object-fit: cover; 
-    transform: scale(1.15); /* 15% 강제 확대 */
+    transform: scale(1.15);
     transition: transform 0.3s ease;
 }
 .monthly-card:hover .monthly-thumb {
-    transform: scale(1.20); /* 마우스 오버 시 살짝 더 줌인 */
+    transform: scale(1.20);
 }
 
 .monthly-info {
@@ -280,12 +279,11 @@ a.analysis-card {
     border: 0;
 }
 
-/* PDF 전용 강제 확대 임베드 컨테이너 (블랙바 완전 제거) */
+/* ===== 수정: PDF 전용 뷰어 컨테이너 (위아래 잘림 방지) ===== */
 .pdf-embed-container {
     position: relative;
     width: 100%;
-    padding-bottom: 56.25%; 
-    overflow: hidden;
+    height: 85vh; /* 비율 강제 고정 대신 화면 높이에 맞춰 길게 뻗도록 변경 */
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.05);
     background: #1e1e1e;
@@ -293,14 +291,10 @@ a.analysis-card {
     margin-bottom: 18px;
 }
 .pdf-embed-container iframe {
-    position: absolute;
-    top: 0;
-    left: 0;
     width: 100%;
     height: 100%;
     border: 0;
-    transform: scale(1.18); /* iframe 내부의 검은테두리와 툴바를 화면 밖으로 밀어냄 */
-    transform-origin: center center;
+    /* transform: scale(1.18); <- 위아래 잘리는 주범 삭제! */
 }
 </style>
 """
@@ -465,7 +459,6 @@ def get_drive_thumbnail_url(file_id: str) -> Optional[str]:
         file_meta = service.files().get(fileId=file_id, fields="thumbnailLink").execute()
         link = file_meta.get("thumbnailLink")
         if link:
-            # 강제 확대 시 이미지가 깨지지 않도록, API 호출 URL 파라미터를 고해상도(s1000)로 변환
             link = re.sub(r'=s\d+$', '=s1000', link)
         return link
     except Exception as e:
@@ -581,7 +574,6 @@ def render_monthly_list(df_monthly: pd.DataFrame):
 
         link = f"?view=monthly_detail&id={row['row_id']}"
         
-        # monthly-thumb-box 래퍼를 추가하여 확대된 썸네일이 카드를 넘지 않게 처리
         card_html = f'<a href="{link}" target="_self" class="monthly-card"><div class="monthly-thumb-box"><img src="{thumb_url}" class="monthly-thumb" alt="{title}"></div><div class="monthly-info"><div class="monthly-title">{title}</div><div class="monthly-date">발행시점 : {date}</div></div></a>'
         cols_html.append(card_html)
         
@@ -606,7 +598,6 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
 
     embed_url = build_embed_url_if_possible(url)
     if embed_url:
-        # PDF 전용 강제 확대 컨테이너(pdf-embed-container) 사용
         st.markdown(f"""
         <div class="pdf-embed-container">
             <iframe src="{embed_url}" allowfullscreen="true"></iframe>
