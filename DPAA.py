@@ -226,7 +226,6 @@ a.analysis-card {
     display: block;
 }
 .analysis-card:hover {
-    border-color: #ff7a50;
     box-shadow: 0 8px 24px rgba(0,0,0,0.08);
     transform: translateY(-2px);
 }
