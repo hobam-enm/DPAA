@@ -869,7 +869,7 @@ def render_actor_genre_list(df: pd.DataFrame):
             actor_df = actor_df[actor_df["ip"].isin(selected_ips)]
 
         if actor_df.empty:
-            st.info("조건에 맞는 배우 분석 페이지가 없습니다.")
+            st.info("조건에 맞는 캐스팅 분석 페이지가 없습니다.")
         else:
             for _, row in actor_df.iterrows():
                 link = f"?view=actor_detail&id={row['row_id']}"
@@ -890,7 +890,7 @@ def render_actor_genre_list(df: pd.DataFrame):
                     <a href="{link}" target="_self" class="analysis-card">
                       <div class="analysis-title-row">
                         <div class="analysis-ip">{title_display}</div>
-                        <div class="analysis-label">배우 분석</div>
+                        <div class="analysis-label">캐스팅 분석</div>
                       </div>
                       <div class="analysis-meta">{meta}</div>
                       <div class="analysis-sub">작품: {ip}</div>
