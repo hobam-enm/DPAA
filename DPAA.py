@@ -1,6 +1,7 @@
 import json
 import re
 import io
+import base64
 from typing import List, Optional
 from urllib.parse import urlparse, parse_qs
 
@@ -42,6 +43,7 @@ section[data-testid="stSidebar"] {display:none !important;}
 """
 st.markdown(HIDE_UI, unsafe_allow_html=True)
 
+# ===== CSS 대폭 수정: 뷰어 가로폭 제한 및 페이지 테두리 적용 =====
 CUSTOM_CSS = """
 <style>
 html, body, [class*="css"]  {
@@ -146,7 +148,7 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     border-color: #ff7a50;
 }
 
-/* 썸네일 강제 확대 (요청하신 1.10 적용) */
+/* 썸네일 강제 확대 1.10 유지 */
 .monthly-thumb-box {
     width: 100%;
     aspect-ratio: 16 / 9;
@@ -157,7 +159,7 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     width: 100%;
     height: 100%;
     object-fit: cover; 
-    transform: scale(1.10); /* 1.10 적용 */
+    transform: scale(1.10); 
     transition: transform 0.3s ease;
 }
 .monthly-card:hover .monthly-thumb {
@@ -229,6 +231,14 @@ a.analysis-card {
     font-weight: 500;
 }
 
+/* =========================================
+   상세 뷰어 공통 및 텍스트 스타일
+========================================= */
+.viewer-wrapper {
+    max-width: 1100px; /* 너무 꽉 차는 현상을 방지하기 위해 가로폭 제한 */
+    margin: 0 auto;    /* 화면 중앙 정렬 */
+}
+
 .detail-back {
     display: inline-block;
     padding: 8px 16px;
@@ -258,6 +268,20 @@ a.analysis-card {
     color: #666;
     margin-bottom: 20px;
     line-height: 1.6;
+}
+
+/* =========================================
+   PDF 및 슬라이드 컨테이너 스타일
+========================================= */
+/* PDF 개별 페이지 이미지 (테두리 추가) */
+.pdf-page-img {
+    width: 100%;
+    display: block;
+    border: 1px solid #d4d4d4; /* 너무 진하지 않은 부드러운 테두리 */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06); /* 페이지 간 구분용 가벼운 그림자 */
+    margin-bottom: 30px; /* 페이지 사이 간격 넓게 확보 */
+    border-radius: 6px; /* 끝부분 살짝 둥글게 */
+    background-color: #ffffff;
 }
 
 /* 슬라이드 썸네일 전용 임베드 컨테이너 */
@@ -465,10 +489,8 @@ def get_drive_thumbnail_url(file_id: str) -> Optional[str]:
     except Exception as e:
         return None
 
-# ===== Base64가 아닌 순수 바이너리 바이트로 반환하도록 수정 =====
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_drive_pdf_bytes(file_id: str) -> Optional[bytes]:
-    """Drive API를 사용해 PDF 원본을 바이트로 다운로드합니다."""
     service = get_drive_service()
     if service is None: return None
     try:
@@ -599,7 +621,7 @@ def render_monthly_list(df_monthly: pd.DataFrame):
     cols_html.append("</div>")
     st.markdown("".join(cols_html), unsafe_allow_html=True)
 
-# ===== 핵심 수정: PyMuPDF를 활용한 네이티브 이미지 스트리밍 방식 적용 =====
+# ===== 수정: 상세 뷰어 가로폭 제한 래퍼(viewer-wrapper) 및 페이지 이미지 테두리 적용 =====
 def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     row = df_monthly[df_monthly["row_id"] == row_id]
     if row.empty:
@@ -607,14 +629,18 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
         return
     row = row.iloc[0]
 
-    st.markdown('<a href="?view=monthly" target="_self" class="detail-back">← 월간 리포트 목록으로</a>', unsafe_allow_html=True)
-
     title = row["title"]
     date = row["date"]
     url = row["url"]
 
-    st.markdown(f'<div class="detail-title">{title}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="detail-subtitle">발행시점 : {date}</div>', unsafe_allow_html=True)
+    # 헤더 텍스트가 왼쪽으로 치우치지 않게 뷰어와 동일한 컨테이너(viewer-wrapper)로 묶음
+    st.markdown(f'''
+    <div class="viewer-wrapper">
+        <a href="?view=monthly" target="_self" class="detail-back">← 월간 리포트 목록으로</a>
+        <div class="detail-title">{title}</div>
+        <div class="detail-subtitle">발행시점 : {date}</div>
+    </div>
+    ''', unsafe_allow_html=True)
 
     file_id = extract_drive_file_id(url)
     rendered_native = False
@@ -624,35 +650,38 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
             pdf_bytes = get_drive_pdf_bytes(file_id)
             if pdf_bytes:
                 try:
-                    import fitz  # PyMuPDF 라이브러리 (requirements.txt 에 PyMuPDF 필수)
+                    import fitz
                     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
                     
-                    # 이미지를 담을 깔끔한 컨테이너 배경
-                    st.markdown('<div style="background:#f5f5f5; padding:20px; border-radius:12px; border:1px solid #eaeaea; box-shadow:0 10px 30px rgba(0,0,0,0.05);">', unsafe_allow_html=True)
+                    # 뷰어 컨테이너 시작 (회색 배경, 넉넉한 여백)
+                    img_htmls = ['<div class="viewer-wrapper"><div style="background:#f9f9f9; padding:40px; border-radius:16px; border:1px solid #eaeaea; box-shadow:0 10px 30px rgba(0,0,0,0.03);">']
                     
                     for page_num in range(len(doc)):
                         page = doc.load_page(page_num)
-                        # 고화질 렌더링을 위해 줌 2배 적용 및 배경을 흰색으로 강제(투명도 제거)
                         mat = fitz.Matrix(2.0, 2.0)
                         pix = page.get_pixmap(matrix=mat, alpha=False)
-                        # use_container_width=True 로 화면 가로폭에 딱 맞게 시원하게 출력
-                        st.image(pix.tobytes("png"), use_container_width=True)
+                        
+                        # st.image 대신 HTML 태그를 사용해 완벽한 CSS(테두리, 여백 등) 제어 적용
+                        b64_img = base64.b64encode(pix.tobytes("png")).decode("utf-8")
+                        img_htmls.append(f'<img src="data:image/png;base64,{b64_img}" class="pdf-page-img">')
                     
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    img_htmls.append('</div></div>')
+                    st.markdown("".join(img_htmls), unsafe_allow_html=True)
                     rendered_native = True
                 except ImportError:
                     st.error("💡 완벽한 PDF 렌더링을 위해 `PyMuPDF` 라이브러리가 필요합니다.\n\n터미널에 `pip install PyMuPDF`를 입력하거나, `requirements.txt`에 `PyMuPDF`를 추가해 주세요!")
                 except Exception as e:
                     st.error(f"PDF 렌더링 중 오류가 발생했습니다: {e}")
 
-    # PyMuPDF가 없거나 변환 실패 시 기존 구글 뷰어로 폴백
     if not rendered_native:
         embed_url = build_embed_url_if_possible(url)
         if embed_url:
             st.warning("⚠️ 구글 드라이브 기본 뷰어로 임시 렌더링합니다.")
             st.markdown(f"""
-            <div class="pdf-native-container">
-                <iframe src="{embed_url}" allowfullscreen="true"></iframe>
+            <div class="viewer-wrapper">
+                <div class="pdf-native-container">
+                    <iframe src="{embed_url}" allowfullscreen="true"></iframe>
+                </div>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -666,8 +695,10 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
             st.warning("연결된 프레젠테이션 링크가 없습니다.")
             return
         st.markdown(f"""
-        <div class="embed-container">
-            <iframe src="{embed_url}" allowfullscreen="true"></iframe>
+        <div class="viewer-wrapper">
+            <div class="embed-container">
+                <iframe src="{embed_url}" allowfullscreen="true"></iframe>
+            </div>
         </div>
         """, unsafe_allow_html=True)
         return
@@ -679,8 +710,10 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
             st.warning("페이지 범위가 설정되지 않았고, 프레젠테이션을 불러올 수 없습니다.")
             return
         st.markdown(f"""
-        <div class="embed-container">
-            <iframe src="{embed_url}" allowfullscreen="true"></iframe>
+        <div class="viewer-wrapper">
+            <div class="embed-container">
+                <iframe src="{embed_url}" allowfullscreen="true"></iframe>
+            </div>
         </div>
         """, unsafe_allow_html=True)
         return
@@ -693,6 +726,7 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
             return
     else:
         rendered_any = False
+        html_blocks = ['<div class="viewer-wrapper">']
         for p in pages:
             idx = p - 1
             if 0 <= idx < len(page_ids):
@@ -700,19 +734,25 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
                 thumb_url = get_slide_thumbnail_url(pres_id, page_obj_id)
                 if thumb_url:
                     rendered_any = True
-                    st.markdown(f"""
-                    <div class="embed-container" style="background:transparent; border:none; box-shadow:none; margin-bottom:12px;">
-                        <img src="{thumb_url}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; border-radius:12px; border:1px solid #eaeaea; box-shadow:0 10px 30px rgba(0,0,0,0.05);">
+                    # 배우/장르 슬라이드 이미지도 동일한 가벼운 테두리 및 그림자 적용
+                    html_blocks.append(f"""
+                    <div class="embed-container" style="background:transparent; border:none; box-shadow:none; margin-bottom:30px;">
+                        <img src="{thumb_url}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; border-radius:6px; border:1px solid #d4d4d4; box-shadow:0 4px 12px rgba(0,0,0,0.06);">
                     </div>
-                    """, unsafe_allow_html=True)
+                    """)
+        html_blocks.append('</div>')
+        
         if rendered_any:
+            st.markdown("".join(html_blocks), unsafe_allow_html=True)
             return
 
         embed_url = build_embed_url_if_possible(target_url, page_range)
         if embed_url:
             st.markdown(f"""
-            <div class="embed-container">
-                <iframe src="{embed_url}" allowfullscreen="true"></iframe>
+            <div class="viewer-wrapper">
+                <div class="embed-container">
+                    <iframe src="{embed_url}" allowfullscreen="true"></iframe>
+                </div>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -726,8 +766,6 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
         return
     row = row.iloc[0]
 
-    st.markdown('<a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>', unsafe_allow_html=True)
-
     ip = row["ip"]
     cast = row["cast_clean"] or row["cast"]
     date = row["date"]
@@ -740,8 +778,13 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
     cast_text = cast if cast else "배우 정보 없음"
     title_display = f"{cast_text} ({ip})"
 
-    st.markdown(f'<div class="detail-title">{title_display}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="detail-subtitle">배우 분석 리포트<br>{meta}</div>', unsafe_allow_html=True)
+    st.markdown(f'''
+    <div class="viewer-wrapper">
+        <a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>
+        <div class="detail-title">{title_display}</div>
+        <div class="detail-subtitle">배우 분석 리포트<br>{meta}</div>
+    </div>
+    ''', unsafe_allow_html=True)
 
     target_url = row.get("actor_url") or row.get("url")
     page_range = row.get("actor_range", "")
@@ -756,8 +799,6 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
         return
     row = row.iloc[0]
 
-    st.markdown('<a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>', unsafe_allow_html=True)
-
     ip = row["ip"]
     title = row["genre_title"] or "장르 분석"
     date = row["date"]
@@ -769,8 +810,13 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
     title_display = f"{title} ({ip})"
 
-    st.markdown(f'<div class="detail-title">{title_display}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>', unsafe_allow_html=True)
+    st.markdown(f'''
+    <div class="viewer-wrapper">
+        <a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>
+        <div class="detail-title">{title_display}</div>
+        <div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>
+    </div>
+    ''', unsafe_allow_html=True)
 
     target_url = row.get("genre_url") or row.get("url")
     page_range = row.get("genre_range", "")
