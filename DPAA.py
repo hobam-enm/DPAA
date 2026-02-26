@@ -5,7 +5,7 @@ from urllib.parse import urlparse, parse_qs
 
 import pandas as pd
 import streamlit as st
-from streamlit.components.v1 import iframe as st_iframe  # 여전히 예비용
+from streamlit.components.v1 import iframe as st_iframe
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -117,6 +117,53 @@ html, body, [class*="css"]  {
     color: #ff4b4b;
     letter-spacing: 0.1em;
     z-index: 2;
+}
+
+/* 월간 리포트 썸네일 카드 (PDF 전용) */
+.monthly-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 24px;
+    margin-top: 20px;
+}
+.monthly-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #eaeaea;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+}
+.monthly-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+    border-color: #ff7a50;
+}
+.monthly-thumb {
+    width: 100%;
+    height: 380px; /* 세로형 PDF에 맞춘 비율 */
+    object-fit: cover;
+    object-position: top;
+    background: #f5f5f5;
+    border-bottom: 1px solid #eaeaea;
+}
+.monthly-info {
+    padding: 20px;
+}
+.monthly-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: #111;
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+.monthly-date {
+    font-size: 13px;
+    color: #777;
 }
 
 /* 분석 리스트 카드 */
@@ -231,7 +278,6 @@ def build_csv_url(sheet_url: str) -> Optional[str]:
     gid = parse_qs(urlparse(sheet_url).query).get("gid", ["0"])[0]
     return f"https://docs.google.com/spreadsheets/d/{m.group(1)}/export?format=csv&gid={gid}"
 
-
 @st.cache_data(ttl=300, show_spinner=False)
 def load_archive_df() -> pd.DataFrame:
     csv = build_csv_url(ARCHIVE_SHEET_URL)
@@ -243,165 +289,195 @@ def load_archive_df() -> pd.DataFrame:
         return pd.DataFrame()
 
     col_map = {
-        "IP": "ip",
-        "IP명": "ip",
-        "작품명": "ip",
-        "프레젠테이션주소": "url",
-        "프레젠테이션 주소": "url",
-        "PPT주소": "url",
-        "PPT 주소": "url",
-        "포스터이미지URL": "img",
-        "포스터 이미지URL": "img",
-        "포스터 이미지 URL": "img",
-        "작성월": "date",
-        "작성일": "date",
-        "방영일": "air",
-        "방영일자": "air",
-        "주연배우": "cast",
-        "배우명": "cast",
-        "장르/분석내용": "genre_title",
-        "장르분석제목": "genre_title",
-        "장르분석 제목": "genre_title",
-        "배우분석": "actor_range",
-        "장르분석": "genre_range",
-        "배우분석 페이지범위": "actor_range",
-        "배우분석 페이지 범위": "actor_range",
-        "장르분석 페이지범위": "genre_range",
-        "장르분석 페이지 범위": "genre_range",
-        "배우분석 URL": "actor_url",
-        "장르분석 URL": "genre_url",
-        "배우분석URL": "actor_url",
-        "장르분석URL": "genre_url",
+        "IP": "ip", "IP명": "ip", "작품명": "ip",
+        "프레젠테이션주소": "url", "프레젠테이션 주소": "url", "PPT주소": "url", "PPT 주소": "url",
+        "포스터이미지URL": "img", "포스터 이미지URL": "img", "포스터 이미지 URL": "img",
+        "작성월": "date", "작성일": "date",
+        "방영일": "air", "방영일자": "air",
+        "주연배우": "cast", "배우명": "cast",
+        "장르/분석내용": "genre_title", "장르분석제목": "genre_title", "장르분석 제목": "genre_title",
+        "배우분석": "actor_range", "장르분석": "genre_range",
+        "배우분석 페이지범위": "actor_range", "배우분석 페이지 범위": "actor_range",
+        "장르분석 페이지범위": "genre_range", "장르분석 페이지 범위": "genre_range",
+        "배우분석 URL": "actor_url", "장르분석 URL": "genre_url",
+        "배우분석URL": "actor_url", "장르분석URL": "genre_url",
     }
-
     df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
 
     req_cols = [
-        "ip", "url",
-        "img", "date", "air", "cast",
-        "actor_range", "genre_title", "genre_range",
-        "actor_url", "genre_url",
+        "ip", "url", "img", "date", "air", "cast",
+        "actor_range", "genre_title", "genre_range", "actor_url", "genre_url",
     ]
     for c in req_cols:
-        if c not in df.columns:
-            df[c] = ""
+        if c not in df.columns: df[c] = ""
         df[c] = df[c].astype(str).fillna("").str.strip().replace("nan", "")
 
     df["cast_clean"] = df["cast"].apply(
         lambda x: ", ".join([p.strip() for p in re.split(r"[,/]", x) if p.strip()])
         if isinstance(x, str) else ""
     )
-
     df = df[df["ip"] != ""].copy()
     df.reset_index(drop=True, inplace=True)
     df["row_id"] = df.index.astype(str)
     return df
 
+# ===== 추가: 월간 드라마 인사이트 전용 시트 로더 =====
+@st.cache_data(ttl=300, show_spinner=False)
+def load_monthly_df() -> pd.DataFrame:
+    """
+    엑셀 포맷으로 export하여 '월간 드라마인사이트' 시트만 구체적으로 로드합니다.
+    (openpyxl 패키지가 필요합니다.)
+    """
+    if not ARCHIVE_SHEET_URL:
+        return pd.DataFrame()
+    m = re.search(r"/spreadsheets/d/([^/]+)/", ARCHIVE_SHEET_URL)
+    if not m:
+        return pd.DataFrame()
+    
+    sheet_id = m.group(1)
+    xlsx_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
+    
+    try:
+        # 특정 시트명 명시 (시트 이름이 다를 경우 이 부분을 수정하세요)
+        df = pd.read_excel(xlsx_url, sheet_name="월간 드라마인사이트")
+        
+        # A, B, C열만 추출하여 명시적으로 컬럼명 할당
+        df = df.iloc[:, :3]
+        df.columns = ["title", "date", "url"]
+        
+        # 빈 데이터 제거 및 문자열 치환
+        df = df.dropna(subset=["title", "url"])
+        for c in ["title", "date", "url"]:
+            df[c] = df[c].astype(str).fillna("").str.strip().replace("nan", "")
+            
+        df = df[df["title"] != ""].copy()
+        df.reset_index(drop=True, inplace=True)
+        # 상세 뷰를 위한 고유 ID 부여
+        df["row_id"] = "monthly_" + df.index.astype(str)
+        return df
+    except Exception as e:
+        st.error(f"월간 드라마인사이트 시트 로딩 실패: {e}\n(openpyxl 패키지가 설치되어 있는지 확인하세요.)")
+        return pd.DataFrame()
+
 
 # ─────────────────────────────────────────────────────────────
-# Google Slides API – 서비스 계정 인증 & 썸네일
+# Google API – Slides / Drive 인증 및 썸네일
 # ─────────────────────────────────────────────────────────────
 SLIDES_SCOPES = ["https://www.googleapis.com/auth/presentations.readonly"]
+# ===== 추가: Drive API 권한 (PDF 썸네일용) =====
+DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 @st.cache_resource(show_spinner=False)
-def get_slides_service():
+def get_google_credentials(scopes: List[str]):
     google_api_conf = st.secrets.get("google_api", {})
     info_str = google_api_conf.get("service_account_json", "")
     if not info_str:
         return None
     try:
         info = json.loads(info_str)
-        creds = service_account.Credentials.from_service_account_info(
-            info,
-            scopes=SLIDES_SCOPES,
-        )
-        service = build("slides", "v1", credentials=creds, cache_discovery=False)
-        return service
+        return service_account.Credentials.from_service_account_info(info, scopes=scopes)
     except Exception as e:
-        st.warning(f"Slides API 초기화 실패: {e}")
+        st.warning(f"GCP 인증 실패: {e}")
         return None
+
+@st.cache_resource(show_spinner=False)
+def get_slides_service():
+    creds = get_google_credentials(SLIDES_SCOPES)
+    if not creds: return None
+    return build("slides", "v1", credentials=creds, cache_discovery=False)
+
+# ===== 추가: Drive API 서비스 초기화 =====
+@st.cache_resource(show_spinner=False)
+def get_drive_service():
+    creds = get_google_credentials(DRIVE_SCOPES)
+    if not creds: return None
+    return build("drive", "v3", credentials=creds, cache_discovery=False)
 
 @st.cache_data(ttl=600, show_spinner=False)
 def get_presentation_page_ids(presentation_id: str) -> List[str]:
     service = get_slides_service()
-    if service is None:
-        return []
+    if service is None: return []
     try:
         pres = service.presentations().get(presentationId=presentation_id).execute()
         slides = pres.get("slides", [])
-        page_ids = [s.get("objectId") for s in slides if s.get("objectId")]
-        return page_ids
+        return [s.get("objectId") for s in slides if s.get("objectId")]
     except Exception as e:
-        st.warning(f"프레젠테이션 메타 로딩 실패: {e}")
         return []
 
 @st.cache_data(ttl=600, show_spinner=False)
 def get_slide_thumbnail_url(presentation_id: str, page_object_id: str) -> Optional[str]:
     service = get_slides_service()
-    if service is None:
-        return None
+    if service is None: return None
     try:
-        resp = (
-            service.presentations()
-            .pages()
-            .getThumbnail(
-                presentationId=presentation_id,
-                pageObjectId=page_object_id,
-                thumbnailProperties_thumbnailSize="LARGE",
-            )
-            .execute()
-        )
+        resp = service.presentations().pages().getThumbnail(
+            presentationId=presentation_id,
+            pageObjectId=page_object_id,
+            thumbnailProperties_thumbnailSize="LARGE",
+        ).execute()
         return resp.get("contentUrl")
     except Exception as e:
-        st.warning(f"썸네일 로딩 실패: {e}")
+        return None
+
+# ===== 추가: Drive에서 PDF 파일 1페이지 썸네일 가져오기 =====
+@st.cache_data(ttl=600, show_spinner=False)
+def get_drive_thumbnail_url(file_id: str) -> Optional[str]:
+    """
+    Google Drive API를 통해 PDF의 thumbnailLink를 반환합니다.
+    """
+    service = get_drive_service()
+    if service is None: return None
+    try:
+        file_meta = service.files().get(fileId=file_id, fields="thumbnailLink").execute()
+        return file_meta.get("thumbnailLink")
+    except Exception as e:
         return None
 
 
 # ─────────────────────────────────────────────────────────────
-# 유틸 – 슬라이드 ID, 페이지 범위 파싱
+# 유틸 – URL 파싱 및 임베드
 # ─────────────────────────────────────────────────────────────
 def parse_page_range(page_range: str) -> List[int]:
     page_range = (page_range or "").strip()
-    if not page_range:
-        return []
+    if not page_range: return []
     m = re.match(r"(\d+)\s*-\s*(\d+)", page_range)
     if m:
         start, end = int(m.group(1)), int(m.group(2))
-        if start > end:
-            start, end = end, start
+        if start > end: start, end = end, start
         return list(range(start, end + 1))
     m = re.match(r"(\d+)", page_range)
-    if m:
-        return [int(m.group(1))]
+    if m: return [int(m.group(1))]
     return []
 
 def extract_presentation_id(url: str) -> Optional[str]:
-    if not url or "docs.google.com/presentation" not in url:
-        return None
+    if not url or "docs.google.com/presentation" not in url: return None
     m = re.search(r"/d/([^/]+)/", url)
-    if not m:
-        return None
-    return m.group(1)
+    return m.group(1) if m else None
+
+# ===== 추가: 드라이브 일반 파일(PDF) ID 추출기 =====
+def extract_drive_file_id(url: str) -> Optional[str]:
+    if not url: return None
+    # /file/d/ID/view 패턴
+    m = re.search(r"/file/d/([^/]+)", url)
+    if m: return m.group(1)
+    # ?id=ID 패턴
+    m = re.search(r"id=([^&]+)", url)
+    if m: return m.group(1)
+    return None
 
 def build_embed_url_if_possible(url: str, page_range: str = "") -> str:
-    if not url:
-        return ""
+    if not url: return ""
     is_pdf = url.lower().endswith(".pdf") or "/file/d/" in url
     if is_pdf:
-        if "/preview" in url:
-            return url
+        if "/preview" in url: return url
         return url.replace("/view", "/preview")
 
     if "docs.google.com/presentation" in url:
         pres_id = extract_presentation_id(url)
-        if not pres_id:
-            return url
+        if not pres_id: return url
         base = f"https://docs.google.com/presentation/d/{pres_id}/embed?start=false&loop=false&delayms=60000"
         pages = parse_page_range(page_range)
-        if pages:
-            base += f"&slide=id.p{pages[0]}"
+        if pages: base += f"&slide=id.p{pages[0]}"
         return base
-
     return url
 
 
@@ -416,8 +492,7 @@ def render_home():
         드라마 마케팅·인사이트 리포트를 한 곳에 모은 아카이브입니다.<br>
         상단의 카드에서 보고 싶은 리포트 유형을 선택하세요.
         </div>
-        """,
-        unsafe_allow_html=True,
+        """, unsafe_allow_html=True
     )
 
     monthly_link = "?view=monthly"
@@ -441,21 +516,77 @@ def render_home():
             </div>
           </a>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """, unsafe_allow_html=True
     )
 
+# ===== 수정: 월간 리포트 리스트 (PDF 썸네일 그리드) =====
+def render_monthly_list(df_monthly: pd.DataFrame):
+    st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
+    st.markdown('<div class="detail-title">월간 드라마 인사이트 리포트</div>', unsafe_allow_html=True)
+    st.markdown('<div class="detail-subtitle">월 단위 시장 인사이트와 시청자 반응을 분석한 PDF 리포트입니다.</div>', unsafe_allow_html=True)
 
-def render_monthly_stub():
-    st.markdown(
-        '<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="detail-title">월간 드라마 인사이트 리포트</div>',
-        unsafe_allow_html=True,
-    )
-    st.info("월간 리포트 페이지 구성은 추후 설계 예정입니다.")
+    if df_monthly.empty:
+        st.info("등록된 월간 리포트가 없습니다. 시트를 확인해 주세요.")
+        return
+
+    # 카드 그리드 시작
+    cols_html = ['<div class="monthly-grid">']
+    
+    for _, row in df_monthly.iterrows():
+        title = row["title"]
+        date = row["date"]
+        url = row["url"]
+        
+        file_id = extract_drive_file_id(url)
+        thumb_url = ""
+        
+        # Drive API 썸네일 호출 (없으면 플레이스홀더)
+        if file_id:
+            thumb_url = get_drive_thumbnail_url(file_id) or "https://via.placeholder.com/400x560?text=No+Thumbnail"
+        else:
+            thumb_url = "https://via.placeholder.com/400x560?text=Invalid+Link"
+
+        link = f"?view=monthly_detail&id={row['row_id']}"
+        
+        card_html = f"""
+        <a href="{link}" target="_self" class="monthly-card">
+            <img src="{thumb_url}" class="monthly-thumb" alt="{title}">
+            <div class="monthly-info">
+                <div class="monthly-title">{title}</div>
+                <div class="monthly-date">발행시점 : {date}</div>
+            </div>
+        </a>
+        """
+        cols_html.append(card_html)
+        
+    cols_html.append("</div>")
+    st.markdown("".join(cols_html), unsafe_allow_html=True)
+
+# ===== 추가: 월간 리포트 상세 (PDF 뷰어) =====
+def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
+    row = df_monthly[df_monthly["row_id"] == row_id]
+    if row.empty:
+        st.error("유효하지 않은 접근입니다.")
+        return
+    row = row.iloc[0]
+
+    st.markdown('<a href="?view=monthly" target="_self" class="detail-back">← 월간 리포트 목록으로</a>', unsafe_allow_html=True)
+
+    title = row["title"]
+    date = row["date"]
+    url = row["url"]
+
+    st.markdown(f'<div class="detail-title">{title}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="detail-subtitle">발행시점 : {date}</div>', unsafe_allow_html=True)
+
+    # PDF 링크를 /preview 형식으로 변환하여 iframe 출력
+    embed_url = build_embed_url_if_possible(url)
+    if embed_url:
+        st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
+        st_iframe(embed_url, height=900, scrolling=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.warning("PDF를 불러올 수 없습니다. 올바른 구글 드라이브 링크인지 확인해 주세요.")
 
 
 def render_slide_range_as_thumbnails(target_url: str, page_range: str):
@@ -497,10 +628,7 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
                 if thumb_url:
                     rendered_any = True
                     st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
-                    st.markdown(
-                        f'<img src="{thumb_url}" style="width:100%;display:block;">',
-                        unsafe_allow_html=True,
-                    )
+                    st.markdown(f'<img src="{thumb_url}" style="width:100%;display:block;">', unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)
         if rendered_any:
             return
@@ -521,10 +649,7 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
         return
     row = row.iloc[0]
 
-    st.markdown(
-        '<a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>', unsafe_allow_html=True)
 
     ip = row["ip"]
     cast = row["cast_clean"] or row["cast"]
@@ -538,14 +663,8 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
     cast_text = cast if cast else "배우 정보 없음"
     title_display = f"{cast_text} ({ip})"
 
-    st.markdown(
-        f'<div class="detail-title">{title_display}</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f'<div class="detail-subtitle">배우 분석 리포트<br>{meta}</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<div class="detail-title">{title_display}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="detail-subtitle">배우 분석 리포트<br>{meta}</div>', unsafe_allow_html=True)
 
     target_url = row.get("actor_url") or row.get("url")
     page_range = row.get("actor_range", "")
@@ -560,10 +679,7 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
         return
     row = row.iloc[0]
 
-    st.markdown(
-        '<a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>', unsafe_allow_html=True)
 
     ip = row["ip"]
     title = row["genre_title"] or "장르 분석"
@@ -574,17 +690,10 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
     air_str = air if air else "미상"
     meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
 
-    # ===== 1. 장르 분석 상세 페이지 타이틀 포맷 수정 =====
     title_display = f"{title} ({ip})"
 
-    st.markdown(
-        f'<div class="detail-title">{title_display}</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f'<div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<div class="detail-title">{title_display}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>', unsafe_allow_html=True)
 
     target_url = row.get("genre_url") or row.get("url")
     page_range = row.get("genre_range", "")
@@ -593,48 +702,28 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
 
 def render_actor_genre_list(df: pd.DataFrame):
-    st.markdown(
-        '<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="detail-title">배우 / 장르 분석 리포트</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
+    st.markdown('<div class="detail-title">배우 / 장르 분석 리포트</div>', unsafe_allow_html=True)
     st.markdown(
         """
         <div class="detail-subtitle">
         한 작품의 슬라이드 중, 배우 분석/장르 분석에 해당하는 페이지만 따로 모아본 리포트입니다.<br>
         아래 검색이나 탭에서 유형을 선택하고, 카드 클릭 시 해당 분석 슬라이드가 열립니다.
         </div>
-        """,
-        unsafe_allow_html=True,
+        """, unsafe_allow_html=True
     )
 
-    # ===== 2. 검색 및 필터 리스트(다중 선택) 영역 =====
     col1, col2 = st.columns(2)
-    
     with col1:
-        search_query = st.text_input(
-            "🔍 텍스트 검색 (배우, 장르 등)", 
-            placeholder="검색어를 입력하세요..."
-        )
-    
+        search_query = st.text_input("🔍 텍스트 검색 (배우, 장르 등)", placeholder="검색어를 입력하세요...")
     with col2:
-        # 등록된 전체 작품명 중복 없이 리스트화
         unique_ips = sorted(df["ip"].dropna().unique().tolist())
-        selected_ips = st.multiselect(
-            "📌 작품명 필터 (리스트 선택)",
-            options=unique_ips,
-            default=[]
-        )
+        selected_ips = st.multiselect("📌 작품명 필터 (리스트 선택)", options=unique_ips, default=[])
 
     tab_actor, tab_genre = st.tabs(["배우 분석", "장르 분석"])
 
     with tab_actor:
         actor_df = df[df["actor_range"] != ""].copy()
-        
-        # 텍스트 검색 및 드롭다운 선택 필터링 적용
         if search_query:
             mask = actor_df["ip"].str.contains(search_query, case=False, na=False) | \
                    actor_df["cast"].str.contains(search_query, case=False, na=False)
@@ -672,14 +761,11 @@ def render_actor_genre_list(df: pd.DataFrame):
                         <div class="analysis-sub">작품: {ip}</div>
                       </div>
                     </a>
-                    """,
-                    unsafe_allow_html=True,
+                    """, unsafe_allow_html=True
                 )
 
     with tab_genre:
         genre_df = df[df["genre_range"] != ""].copy()
-        
-        # 텍스트 검색 및 드롭다운 선택 필터링 적용
         if search_query:
             mask = genre_df["ip"].str.contains(search_query, case=False, na=False) | \
                    genre_df["genre_title"].str.contains(search_query, case=False, na=False)
@@ -702,7 +788,6 @@ def render_actor_genre_list(df: pd.DataFrame):
                 air_str = air if air else "미상"
                 meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
 
-                # ===== 1. 장르 분석 리스트 타이틀 포맷 수정 =====
                 title_display = f"{title} ({ip})"
 
                 st.markdown(
@@ -717,8 +802,7 @@ def render_actor_genre_list(df: pd.DataFrame):
                         <div class="analysis-sub">작품: {ip}</div>
                       </div>
                     </a>
-                    """,
-                    unsafe_allow_html=True,
+                    """, unsafe_allow_html=True
                 )
 
 
@@ -730,22 +814,28 @@ def main():
         render_home()
         return
 
-    df = load_archive_df()
-    if df.empty:
-        st.error("아카이브 데이터를 불러오지 못했습니다. ARCHIVE_SHEET_URL 설정을 확인하세요.")
-        return
-
+    # ===== 수정: 라우팅 로직(월간 상세 뷰 추가) =====
     if VIEW == "monthly":
-        render_monthly_stub()
-    elif VIEW == "actor_genre":
-        render_actor_genre_list(df)
-    elif VIEW == "actor_detail" and ROW_ID is not None:
-        render_actor_detail(df, ROW_ID)
-    elif VIEW == "genre_detail" and ROW_ID is not None:
-        render_genre_detail(df, ROW_ID)
+        df_monthly = load_monthly_df()
+        render_monthly_list(df_monthly)
+    elif VIEW == "monthly_detail" and ROW_ID is not None:
+        df_monthly = load_monthly_df()
+        render_monthly_detail(df_monthly, ROW_ID)
     else:
-        render_home()
+        # 배우/장르 아카이브 데이터 로딩 (월간이 아닐 때만 로딩)
+        df = load_archive_df()
+        if df.empty:
+            st.error("아카이브 데이터를 불러오지 못했습니다. ARCHIVE_SHEET_URL 설정을 확인하세요.")
+            return
 
+        if VIEW == "actor_genre":
+            render_actor_genre_list(df)
+        elif VIEW == "actor_detail" and ROW_ID is not None:
+            render_actor_detail(df, ROW_ID)
+        elif VIEW == "genre_detail" and ROW_ID is not None:
+            render_genre_detail(df, ROW_ID)
+        else:
+            render_home()
 
 if __name__ == "__main__":
     main()
