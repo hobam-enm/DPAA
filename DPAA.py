@@ -80,7 +80,6 @@ html, body, [class*="css"]  {
     height: 400px;
     padding: 40px;
     border-radius: 24px;
-    background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
     border: 1px solid #e0e0e0;
     box-shadow: 0 20px 40px rgba(0,0,0,0.05);
     text-decoration: none !important;
@@ -91,6 +90,22 @@ html, body, [class*="css"]  {
     justify-content: flex-end;
     transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     cursor: pointer;
+}
+
+/* 월간 리포트 카드 배경 (이성적, 차분한 데이터 느낌의 소프트 그레이-블루) */
+.card-monthly {
+    background: linear-gradient(135deg, #f6f8fb 0%, #e5ebf4 100%);
+}
+
+/* 배우/장르 리포트 카드 배경 (감성적, 따뜻한 콘텐츠 느낌의 소프트 피치-베이지) */
+.card-actor {
+    background: linear-gradient(135deg, #fcfaf9 0%, #f4ece6 100%);
+}
+
+.home-card:hover {
+    transform: translateY(-8px);
+    border-color: #ff7a50;
+    box-shadow: 0 30px 60px rgba(0,0,0,0.1);
 }
 .home-card:hover {
     transform: translateY(-8px);
@@ -488,8 +503,9 @@ def get_drive_thumbnail_url(file_id: str) -> Optional[str]:
     except Exception as e:
         return None
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=3600, max_entries=5, show_spinner=False)
 def get_drive_pdf_bytes(file_id: str) -> Optional[bytes]:
+    """Drive API를 사용해 PDF 원본을 바이트로 다운로드합니다."""
     service = get_drive_service()
     if service is None: return None
     try:
@@ -562,7 +578,7 @@ def render_home():
     st.markdown(
         f"""
         <div class="home-grid">
-          <a href="{monthly_link}" target="_self" class="home-card">
+          <a href="{monthly_link}" target="_self" class="home-card card-monthly">
             <div class="home-card-tag">MONTHLY</div>
             <div class="home-card-title">월간 드라마 인사이트 리포트</div>
             <div class="home-card-desc">
@@ -570,7 +586,7 @@ def render_home():
               IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.
             </div>
           </a>
-          <a href="{actor_link}" target="_self" class="home-card">
+          <a href="{actor_link}" target="_self" class="home-card card-actor">
             <div class="home-card-tag">CAST / GENRE</div>
             <div class="home-card-title">배우 / 장르 분석 리포트</div>
             <div class="home-card-desc">
