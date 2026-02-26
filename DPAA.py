@@ -102,16 +102,22 @@ html, body, [class*="css"]  {
     background: linear-gradient(135deg, #fcfaf9 0%, #f4ece6 100%);
 }
 
+/* ===== 수정: 카드 공통 호버 액션 및 중복 코드 제거 ===== */
 .home-card:hover {
     transform: translateY(-8px);
-    border-color: #ff7a50;
     box-shadow: 0 30px 60px rgba(0,0,0,0.1);
 }
-.home-card:hover {
-    transform: translateY(-8px);
-    border-color: #ff7a50;
-    box-shadow: 0 30px 60px rgba(0,0,0,0.1);
+
+/* ===== 추가: 월간 리포트 호버 테두리 (파란색 계열) ===== */
+.card-monthly:hover {
+    border-color: #4a90e2; 
 }
+
+/* ===== 추가: 배우/장르 리포트 호버 테두리 (보라색 계열) ===== */
+.card-actor:hover {
+    border-color: #8b5cf6; 
+}
+
 .home-card-title {
     font-size: 32px;
     font-weight: 800;
@@ -125,15 +131,24 @@ html, body, [class*="css"]  {
     line-height: 1.6;
     z-index: 2;
 }
+
+/* ===== 수정: 공통 태그 스타일에서 고정 색상 제거 ===== */
 .home-card-tag {
     position: absolute;
     top: 30px;
     right: 30px;
     font-size: 14px;
     font-weight: bold;
-    color: #ff4b4b !important;
     letter-spacing: 0.1em;
     z-index: 2;
+}
+
+/* ===== 추가: 각 카드별 우상단 태그 색상 개별 지정 ===== */
+.card-monthly .home-card-tag {
+    color: #4a90e2 !important; /* 파란색 계열 */
+}
+.card-actor .home-card-tag {
+    color: #8b5cf6 !important; /* 보라색 계열 */
 }
 
 .monthly-grid {
