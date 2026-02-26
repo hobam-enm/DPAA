@@ -91,16 +91,44 @@ html, body, [class*="css"]  {
     transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     cursor: pointer;
 }
-
-/* 월간 리포트 카드 배경 (이성적, 차분한 데이터 느낌의 소프트 그레이-블루) */
-.card-monthly {
-    background: linear-gradient(135deg, #f6f8fb 0%, #e5ebf4 100%);
+/* ===== 홈 카드 배경 이미지 + 하단 그라데이션 오버레이 ===== */
+.home-card::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background-image: var(--bg);
+    background-size: cover;
+    background-position: center;
+    transform: scale(1.02);
+    z-index:0;
+}
+.home-card::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    /* 아래로 갈수록 검정이 진하고, 위로 갈수록 투명 */
+    background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.35) 35%, rgba(0,0,0,0.00) 72%);
+    z-index:1;
+}
+.home-card-title, .home-card-desc, .home-card-tag{
+    position: relative;
+    z-index: 2;
+    color: #ffffff !important;
+}
+.home-card-desc{
+    color: rgba(255,255,255,0.92) !important;
+}
+.home-card-tag{
+    color: rgba(255,255,255,0.9) !important;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+.home-card-title{
+    text-shadow: 0 6px 20px rgba(0,0,0,0.45);
 }
 
-/* 배우/장르 리포트 카드 배경 (감성적, 따뜻한 콘텐츠 느낌의 소프트 피치-베이지) */
-.card-actor {
-    background: linear-gradient(135deg, #F5ECFF 0%, #f4ece6 100%);
-}
+.card-monthly { background: transparent; }
+
+.card-actor { background: transparent; }
 
 /* ===== 수정: 카드 공통 호버 액션 및 중복 코드 제거 ===== */
 .home-card:hover {
@@ -122,13 +150,9 @@ html, body, [class*="css"]  {
     font-size: 32px;
     font-weight: 800;
     margin-bottom: 12px;
-    z-index: 2;
-    color: #222 !important;
-}
+    z-index: 2;}
 .home-card-desc {
-    font-size: 16px;
-    color: #555 !important;
-    line-height: 1.6;
+    font-size: 16px;    line-height: 1.6;
     z-index: 2;
 }
 
@@ -143,13 +167,6 @@ html, body, [class*="css"]  {
     z-index: 2;
 }
 
-/* ===== 추가: 각 카드별 우상단 태그 색상 개별 지정 ===== */
-.card-monthly .home-card-tag {
-    color: #4a90e2 !important; /* 파란색 계열 */
-}
-.card-actor .home-card-tag {
-    color: #8b5cf6 !important; /* 보라색 계열 */
-}
 
 .monthly-grid {
     display: grid;
@@ -362,6 +379,10 @@ VIEW = params.get("view", "home")
 ROW_ID = params.get("id", None)
 
 ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
+
+# 홈 카드 배경 이미지(Secrets)
+HOME_IMG1 = st.secrets.get("img1", "")
+HOME_IMG2 = st.secrets.get("img2", "")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -594,13 +615,16 @@ def render_home():
         unsafe_allow_html=True
     )
 
+    img1 = HOME_IMG1
+    img2 = HOME_IMG2
+
     monthly_link = "?view=monthly"
     actor_link = "?view=actor_genre"
 
     st.markdown(
         f"""
         <div class="home-grid">
-          <a href="{monthly_link}" target="_self" class="home-card card-monthly">
+          <a href="{monthly_link}" target="_self" class="home-card card-monthly" style="--bg:url('{img1}')">
             <div class="home-card-tag">MONTHLY</div>
             <div class="home-card-title">월간 드라마 인사이트 리포트</div>
             <div class="home-card-desc">
@@ -608,7 +632,7 @@ def render_home():
               IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.
             </div>
           </a>
-          <a href="{actor_link}" target="_self" class="home-card card-actor">
+          <a href="{actor_link}" target="_self" class="home-card card-actor" style="--bg:url('{img2}')">
             <div class="home-card-tag">CAST / GENRE</div>
             <div class="home-card-title">캐스팅 / 장르 분석 리포트</div>
             <div class="home-card-desc">
