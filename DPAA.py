@@ -158,7 +158,7 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     width: 100%;
     height: 100%;
     object-fit: cover; 
-    transform: scale(1.05);
+    transform: scale(1.10); /* 요청하신 1.10 적용 */
     transition: transform 0.3s ease;
 }
 .monthly-card:hover .monthly-thumb {
@@ -282,7 +282,7 @@ a.analysis-card {
     border: 0;
 }
 
-/* 순정 PDF 뷰어 전용 컨테이너 (깔끔한 테두리와 높이) */
+/* ===== 수정: PDF를 위한 전용 컨테이너 (iframe 대신 embed/object 사용을 위함) ===== */
 .pdf-native-container {
     width: 100%;
     height: 85vh; /* 화면 높이에 맞춰 시원하게 출력 */
@@ -292,8 +292,9 @@ a.analysis-card {
     border: 1px solid #eaeaea;
     margin-bottom: 18px;
     overflow: hidden;
+    display: flex; /* 내부 요소 크기 맞춤용 */
 }
-.pdf-native-container iframe {
+.pdf-native-container embed, .pdf-native-container object, .pdf-native-container iframe {
     width: 100%;
     height: 100%;
     border: 0;
@@ -466,12 +467,8 @@ def get_drive_thumbnail_url(file_id: str) -> Optional[str]:
     except Exception as e:
         return None
 
-# ===== 추가: 드라이브에서 PDF 파일을 바이트로 다운받아 Base64로 인코딩 =====
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_drive_pdf_base64(file_id: str) -> Optional[str]:
-    """
-    Drive API를 사용해 PDF 원본 파일을 다운로드하고 Base64 문자열로 반환합니다.
-    """
     service = get_drive_service()
     if service is None: return None
     try:
@@ -602,7 +599,7 @@ def render_monthly_list(df_monthly: pd.DataFrame):
     cols_html.append("</div>")
     st.markdown("".join(cols_html), unsafe_allow_html=True)
 
-# ===== 핵심 수정: PDF Base64 순정 뷰어 랜더링 =====
+# ===== 핵심 수정: iframe 대신 embed 태그 적용 (브라우저 차단 방지) =====
 def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     row = df_monthly[df_monthly["row_id"] == row_id]
     if row.empty:
@@ -626,16 +623,15 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
         with st.spinner("🚀 고화질 PDF 문서를 다이렉트로 불러오고 있습니다... (약 2~3초 소요)"):
             b64_pdf = get_drive_pdf_base64(file_id)
             if b64_pdf:
-                # #view=FitH 파라미터를 추가하여 브라우저가 자동으로 가로폭에 꽉 맞게(시원하게) 렌더링하게 함
+                # iframe 대신 embed 태그를 사용해 보안 차단을 우회하고 브라우저 네이티브 뷰어 호출
                 pdf_html = f'''
                 <div class="pdf-native-container">
-                    <iframe src="data:application/pdf;base64,{b64_pdf}#view=FitH&toolbar=0&navpanes=0"></iframe>
+                    <embed src="data:application/pdf;base64,{b64_pdf}#view=FitH&toolbar=0&navpanes=0" type="application/pdf" width="100%" height="100%">
                 </div>
                 '''
                 st.markdown(pdf_html, unsafe_allow_html=True)
                 rendered_native = True
 
-    # 혹시라도 파일 용량이 너무 커서 다운로드에 실패했을 경우를 위한 안전망 (기존 프리뷰)
     if not rendered_native:
         embed_url = build_embed_url_if_possible(url)
         if embed_url:
