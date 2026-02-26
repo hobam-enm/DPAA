@@ -40,7 +40,7 @@ section[data-testid="stSidebar"] {display:none !important;}
 """
 st.markdown(HIDE_UI, unsafe_allow_html=True)
 
-# ===== CSS 수정: 썸네일 비율 및 embed-frame 배경 조정 =====
+# ===== CSS 대폭 수정: 링크 기본스타일 제거, 썸네일 꽉채우기, 16:9 비율 고정 iframe =====
 CUSTOM_CSS = """
 <style>
 html, body, [class*="css"]  {
@@ -81,8 +81,8 @@ html, body, [class*="css"]  {
     background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
     border: 1px solid #e0e0e0;
     box-shadow: 0 20px 40px rgba(0,0,0,0.05);
-    text-decoration: none;
-    color: #222;
+    text-decoration: none !important;
+    color: #222 !important;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -100,10 +100,11 @@ html, body, [class*="css"]  {
     font-weight: 800;
     margin-bottom: 12px;
     z-index: 2;
+    color: #222 !important;
 }
 .home-card-desc {
     font-size: 16px;
-    color: #555;
+    color: #555 !important;
     line-height: 1.6;
     z-index: 2;
 }
@@ -113,7 +114,7 @@ html, body, [class*="css"]  {
     right: 30px;
     font-size: 14px;
     font-weight: bold;
-    color: #ff4b4b;
+    color: #ff4b4b !important;
     letter-spacing: 0.1em;
     z-index: 2;
 }
@@ -124,6 +125,11 @@ html, body, [class*="css"]  {
     gap: 24px;
     margin-top: 20px;
 }
+/* 파란색 밑줄 강제 제거 */
+a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
+    text-decoration: none !important;
+    color: inherit !important;
+}
 .monthly-card {
     background: #ffffff;
     border-radius: 16px;
@@ -131,8 +137,6 @@ html, body, [class*="css"]  {
     box-shadow: 0 4px 12px rgba(0,0,0,0.03);
     overflow: hidden;
     transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-    text-decoration: none;
-    color: inherit;
     display: flex;
     flex-direction: column;
 }
@@ -141,13 +145,13 @@ html, body, [class*="css"]  {
     box-shadow: 0 12px 30px rgba(0,0,0,0.08);
     border-color: #ff7a50;
 }
-/* 1. 썸네일 비율 16:9 및 contain으로 조정 (여백 최소화) */
+/* 썸네일을 16:9 비율로 맞추고 꽉 채우기 (cover) */
 .monthly-thumb {
     width: 100%;
     aspect-ratio: 16 / 9; 
-    object-fit: contain;
-    background: #f5f5f5;
+    object-fit: cover; 
     border-bottom: 1px solid #eaeaea;
+    display: block;
 }
 .monthly-info {
     padding: 20px;
@@ -155,15 +159,20 @@ html, body, [class*="css"]  {
 .monthly-title {
     font-size: 18px;
     font-weight: 800;
-    color: #111;
+    color: #111 !important;
     margin-bottom: 8px;
     line-height: 1.4;
+    text-decoration: none !important;
 }
 .monthly-date {
     font-size: 13px;
-    color: #777;
+    color: #777 !important;
 }
 
+a.analysis-card {
+    text-decoration: none !important;
+    color: inherit !important;
+}
 .analysis-card {
     padding: 20px 24px;
     border-radius: 16px;
@@ -172,6 +181,7 @@ html, body, [class*="css"]  {
     box-shadow: 0 4px 12px rgba(0,0,0,0.03);
     margin-bottom: 16px;
     transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+    display: block;
 }
 .analysis-card:hover {
     border-color: #ff7a50;
@@ -187,7 +197,7 @@ html, body, [class*="css"]  {
 .analysis-ip {
     font-size: 18px;
     font-weight: 800;
-    color: #111;
+    color: #111 !important;
 }
 .analysis-label {
     font-size: 12px;
@@ -217,7 +227,7 @@ html, body, [class*="css"]  {
     font-size: 13px;
     font-weight: 500;
     color: #444 !important;
-    text-decoration: none;
+    text-decoration: none !important;
     background: #fff;
     transition: all 0.2s;
 }
@@ -238,15 +248,27 @@ html, body, [class*="css"]  {
     margin-bottom: 20px;
     line-height: 1.6;
 }
-/* 3. embed-frame 배경을 검정으로 하여 PDF 뷰어와 위화감 제거 */
-.embed-frame {
+
+/* iframe 16:9 비율 고정 (블랙바 완벽 제거 트릭) */
+.embed-container {
+    position: relative;
     width: 100%;
-    border-radius: 12px;
+    padding-bottom: 56.25%; /* 16:9 비율 설정 */
+    height: 0;
     overflow: hidden;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
     background: #1e1e1e;
     border: 1px solid #eaeaea;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
     margin-bottom: 18px;
+}
+.embed-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
 }
 </style>
 """
@@ -523,14 +545,8 @@ def render_monthly_list(df_monthly: pd.DataFrame):
 
         link = f"?view=monthly_detail&id={row['row_id']}"
         
-        # 2. 마크다운 코드 블록 인식 방지 (들여쓰기 제거)
-        card_html = f"""<a href="{link}" target="_self" class="monthly-card">
-<img src="{thumb_url}" class="monthly-thumb" alt="{title}">
-<div class="monthly-info">
-<div class="monthly-title">{title}</div>
-<div class="monthly-date">발행시점 : {date}</div>
-</div>
-</a>"""
+        # HTML을 한 줄로 압축하여 Streamlit Markdown 파서의 코드블록 인식 오류 원천 차단
+        card_html = f'<a href="{link}" target="_self" class="monthly-card"><img src="{thumb_url}" class="monthly-thumb" alt="{title}"><div class="monthly-info"><div class="monthly-title">{title}</div><div class="monthly-date">발행시점 : {date}</div></div></a>'
         cols_html.append(card_html)
         
     cols_html.append("</div>")
@@ -554,10 +570,10 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
 
     embed_url = build_embed_url_if_possible(url)
     if embed_url:
-        # 3. HTML iframe 직접 삽입 (화면 꽉 채우기)
+        # 블랙바 제거를 위해 16:9 비율 컨테이너(embed-container) 사용
         st.markdown(f"""
-        <div class="embed-frame" style="height: 85vh;">
-            <iframe src="{embed_url}" width="100%" height="100%" style="border:none;" allowfullscreen="true"></iframe>
+        <div class="embed-container">
+            <iframe src="{embed_url}" allowfullscreen="true"></iframe>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -571,8 +587,8 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
             st.warning("연결된 프레젠테이션 링크가 없습니다.")
             return
         st.markdown(f"""
-        <div class="embed-frame" style="height: 85vh;">
-            <iframe src="{embed_url}" width="100%" height="100%" style="border:none;" allowfullscreen="true"></iframe>
+        <div class="embed-container">
+            <iframe src="{embed_url}" allowfullscreen="true"></iframe>
         </div>
         """, unsafe_allow_html=True)
         return
@@ -584,8 +600,8 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
             st.warning("페이지 범위가 설정되지 않았고, 프레젠테이션을 불러올 수 없습니다.")
             return
         st.markdown(f"""
-        <div class="embed-frame" style="height: 85vh;">
-            <iframe src="{embed_url}" width="100%" height="100%" style="border:none;" allowfullscreen="true"></iframe>
+        <div class="embed-container">
+            <iframe src="{embed_url}" allowfullscreen="true"></iframe>
         </div>
         """, unsafe_allow_html=True)
         return
@@ -605,17 +621,20 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
                 thumb_url = get_slide_thumbnail_url(pres_id, page_obj_id)
                 if thumb_url:
                     rendered_any = True
-                    st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
-                    st.markdown(f'<img src="{thumb_url}" style="width:100%;display:block;">', unsafe_allow_html=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    # 썸네일도 블랙바 없는 16:9 컨테이너에 맞춤
+                    st.markdown(f"""
+                    <div class="embed-container" style="background:transparent; border:none; box-shadow:none; margin-bottom:12px;">
+                        <img src="{thumb_url}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; border-radius:12px; border:1px solid #eaeaea; box-shadow:0 10px 30px rgba(0,0,0,0.05);">
+                    </div>
+                    """, unsafe_allow_html=True)
         if rendered_any:
             return
 
         embed_url = build_embed_url_if_possible(target_url, page_range)
         if embed_url:
             st.markdown(f"""
-            <div class="embed-frame" style="height: 85vh;">
-                <iframe src="{embed_url}" width="100%" height="100%" style="border:none;" allowfullscreen="true"></iframe>
+            <div class="embed-container">
+                <iframe src="{embed_url}" allowfullscreen="true"></iframe>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -731,15 +750,13 @@ def render_actor_genre_list(df: pd.DataFrame):
 
                 st.markdown(
                     f"""
-                    <a href="{link}" target="_self" style="text-decoration:none;color:inherit;">
-                      <div class="analysis-card">
-                        <div class="analysis-title-row">
-                          <div class="analysis-ip">{title_display}</div>
-                          <div class="analysis-label">배우 분석</div>
-                        </div>
-                        <div class="analysis-meta">{meta}</div>
-                        <div class="analysis-sub">작품: {ip}</div>
+                    <a href="{link}" target="_self" class="analysis-card">
+                      <div class="analysis-title-row">
+                        <div class="analysis-ip">{title_display}</div>
+                        <div class="analysis-label">배우 분석</div>
                       </div>
+                      <div class="analysis-meta">{meta}</div>
+                      <div class="analysis-sub">작품: {ip}</div>
                     </a>
                     """, unsafe_allow_html=True
                 )
@@ -772,15 +789,13 @@ def render_actor_genre_list(df: pd.DataFrame):
 
                 st.markdown(
                     f"""
-                    <a href="{link}" target="_self" style="text-decoration:none;color:inherit;">
-                      <div class="analysis-card">
-                        <div class="analysis-title-row">
-                          <div class="analysis-ip">{title_display}</div>
-                          <div class="analysis-label">장르 분석</div>
-                        </div>
-                        <div class="analysis-meta">{meta}</div>
-                        <div class="analysis-sub">작품: {ip}</div>
+                    <a href="{link}" target="_self" class="analysis-card">
+                      <div class="analysis-title-row">
+                        <div class="analysis-ip">{title_display}</div>
+                        <div class="analysis-label">장르 분석</div>
                       </div>
+                      <div class="analysis-meta">{meta}</div>
+                      <div class="analysis-sub">작품: {ip}</div>
                     </a>
                     """, unsafe_allow_html=True
                 )
