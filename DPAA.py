@@ -566,7 +566,8 @@ def render_home():
             <div class="home-card-tag">MONTHLY</div>
             <div class="home-card-title">월간 드라마 인사이트 리포트</div>
             <div class="home-card-desc">
-              드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.
+              드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, <br>
+              IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.
             </div>
           </a>
           <a href="{actor_link}" target="_self" class="home-card">
