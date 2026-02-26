@@ -70,8 +70,8 @@ html, body, [class*="css"]  {
 }
 
 .home-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 600px 600px;
+    justify-content: center;
     gap: 40px;
     margin-top: 30px;
 }
