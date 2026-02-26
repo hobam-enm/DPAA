@@ -99,7 +99,7 @@ html, body, [class*="css"]  {
 
 /* 배우/장르 리포트 카드 배경 (감성적, 따뜻한 콘텐츠 느낌의 소프트 피치-베이지) */
 .card-actor {
-    background: linear-gradient(135deg, #fcfaf9 0%, #f4ece6 100%);
+    background: linear-gradient(135deg, #F5ECFF 0%, #f4ece6 100%);
 }
 
 /* ===== 수정: 카드 공통 호버 액션 및 중복 코드 제거 ===== */
@@ -851,32 +851,42 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
     render_slide_range_as_thumbnails(target_url, page_range)
 
 
+# ===== 캐스팅 / 장르 분석 리스트 렌더링 =====
 def render_actor_genre_list(df: pd.DataFrame):
     st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">캐스팅 / 장르 분석 리포트</div>', unsafe_allow_html=True)
 
-    # ===== 데이터에서 존재하는 모든 배우명과 장르 키워드 추출 =====
+    # ===== 데이터에서 존재하는 모든 배우명과 장르 키워드 추출 및 정렬 =====
     actor_list = df[df["actor_range"] != ""]["cast_clean"].str.split(r",\s*").explode().str.strip().dropna().unique().tolist()
+    actor_list = sorted([a for a in actor_list if a])
+    
     genre_list = df[df["genre_range"] != ""]["genre_title"].str.strip().dropna().unique().tolist()
-    # 중복 제거 및 빈 값 필터링 후 정렬
-    combined_keywords = sorted(list(set([k for k in (actor_list + genre_list) if k])))
+    genre_list = sorted([g for g in genre_list if g])
+    
+    unique_ips = sorted(df["ip"].dropna().unique().tolist())
 
-    # ===== 필터 영역 (텍스트 입력 -> 드롭다운 다중 선택으로 변경) =====
-    col1, col2 = st.columns(2)
-    with col1:
-        selected_keywords = st.multiselect("🔍 배우 / 분석주제 필터", options=combined_keywords, default=[])
-    with col2:
-        unique_ips = sorted(df["ip"].dropna().unique().tolist())
+    # ===== 수정: 필터 영역 (배우, 분석주제, 작품명 3단 분리) =====
+    col_filter1, col_filter2, col_filter3 = st.columns(3)
+    with col_filter1:
+        selected_actors = st.multiselect("👤 배우 필터", options=actor_list, default=[])
+    with col_filter2:
+        selected_genres = st.multiselect("🏷️ 분석주제 필터", options=genre_list, default=[])
+    with col_filter3:
         selected_ips = st.multiselect("📌 작품명 필터", options=unique_ips, default=[])
 
-    tab_actor, tab_genre = st.tabs(["캐스팅 분석", "장르 분석"])
+    st.markdown("<br>", unsafe_allow_html=True) # 필터와 리스트 사이 여백 확보
 
-    with tab_actor:
+    # ===== 수정: 탭 방식에서 좌우 2단 컬럼 방식으로 변경 =====
+    col_actor, col_genre = st.columns(2)
+
+    # ===== 캐스팅 분석 리스트 (좌측) =====
+    with col_actor:
+        st.markdown("<h3 style='margin-bottom: 16px; font-size: 20px;'>👤 캐스팅 분석</h3>", unsafe_allow_html=True)
         actor_df = df[df["actor_range"] != ""].copy()
         
-        # 키워드 필터 적용 (배우명에 포함되어 있는지 검사)
-        if selected_keywords:
-            mask = actor_df["cast"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_keywords))
+        # 배우 필터 적용
+        if selected_actors:
+            mask = actor_df["cast"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_actors))
             actor_df = actor_df[mask]
         
         # 작품명 필터 적용
@@ -913,12 +923,14 @@ def render_actor_genre_list(df: pd.DataFrame):
                     """, unsafe_allow_html=True
                 )
 
-    with tab_genre:
+    # ===== 장르 분석 리스트 (우측) =====
+    with col_genre:
+        st.markdown("<h3 style='margin-bottom: 16px; font-size: 20px;'>🏷️ 장르 분석</h3>", unsafe_allow_html=True)
         genre_df = df[df["genre_range"] != ""].copy()
         
-        # 키워드 필터 적용 (장르/분석주제에 포함되어 있는지 검사)
-        if selected_keywords:
-            mask = genre_df["genre_title"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_keywords))
+        # 분석주제 필터 적용
+        if selected_genres:
+            mask = genre_df["genre_title"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_genres))
             genre_df = genre_df[mask]
             
         # 작품명 필터 적용
