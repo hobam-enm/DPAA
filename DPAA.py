@@ -1,6 +1,5 @@
 import json
 import re
-import base64
 import io
 from typing import List, Optional
 from urllib.parse import urlparse, parse_qs
@@ -147,7 +146,7 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     border-color: #ff7a50;
 }
 
-/* 썸네일 강제 확대 (10%로 축소) */
+/* 썸네일 강제 확대 (요청하신 1.10 적용) */
 .monthly-thumb-box {
     width: 100%;
     aspect-ratio: 16 / 9;
@@ -158,11 +157,11 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     width: 100%;
     height: 100%;
     object-fit: cover; 
-    transform: scale(1.10); /* 요청하신 1.10 적용 */
+    transform: scale(1.10); /* 1.10 적용 */
     transition: transform 0.3s ease;
 }
 .monthly-card:hover .monthly-thumb {
-    transform: scale(1.15); /* 마우스 오버 시 살짝만 더 줌인 */
+    transform: scale(1.15);
 }
 
 .monthly-info {
@@ -282,19 +281,18 @@ a.analysis-card {
     border: 0;
 }
 
-/* ===== 수정: PDF를 위한 전용 컨테이너 (iframe 대신 embed/object 사용을 위함) ===== */
+/* 구글 드라이브 기본 뷰어 폴백용 */
 .pdf-native-container {
     width: 100%;
-    height: 85vh; /* 화면 높이에 맞춰 시원하게 출력 */
+    height: 85vh; 
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.08);
     background: #f5f5f5;
     border: 1px solid #eaeaea;
     margin-bottom: 18px;
     overflow: hidden;
-    display: flex; /* 내부 요소 크기 맞춤용 */
 }
-.pdf-native-container embed, .pdf-native-container object, .pdf-native-container iframe {
+.pdf-native-container iframe {
     width: 100%;
     height: 100%;
     border: 0;
@@ -467,8 +465,10 @@ def get_drive_thumbnail_url(file_id: str) -> Optional[str]:
     except Exception as e:
         return None
 
+# ===== Base64가 아닌 순수 바이너리 바이트로 반환하도록 수정 =====
 @st.cache_data(ttl=3600, show_spinner=False)
-def get_drive_pdf_base64(file_id: str) -> Optional[str]:
+def get_drive_pdf_bytes(file_id: str) -> Optional[bytes]:
+    """Drive API를 사용해 PDF 원본을 바이트로 다운로드합니다."""
     service = get_drive_service()
     if service is None: return None
     try:
@@ -478,7 +478,7 @@ def get_drive_pdf_base64(file_id: str) -> Optional[str]:
         done = False
         while done is False:
             status, done = downloader.next_chunk()
-        return base64.b64encode(fh.getvalue()).decode('utf-8')
+        return fh.getvalue()
     except Exception as e:
         st.error(f"PDF 파일 다운로드 실패: {e}")
         return None
@@ -599,7 +599,7 @@ def render_monthly_list(df_monthly: pd.DataFrame):
     cols_html.append("</div>")
     st.markdown("".join(cols_html), unsafe_allow_html=True)
 
-# ===== 핵심 수정: iframe 대신 embed 태그 적용 (브라우저 차단 방지) =====
+# ===== 핵심 수정: PyMuPDF를 활용한 네이티브 이미지 스트리밍 방식 적용 =====
 def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     row = df_monthly[df_monthly["row_id"] == row_id]
     if row.empty:
@@ -620,22 +620,36 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     rendered_native = False
 
     if file_id:
-        with st.spinner("🚀 고화질 PDF 문서를 다이렉트로 불러오고 있습니다... (약 2~3초 소요)"):
-            b64_pdf = get_drive_pdf_base64(file_id)
-            if b64_pdf:
-                # iframe 대신 embed 태그를 사용해 보안 차단을 우회하고 브라우저 네이티브 뷰어 호출
-                pdf_html = f'''
-                <div class="pdf-native-container">
-                    <embed src="data:application/pdf;base64,{b64_pdf}#view=FitH&toolbar=0&navpanes=0" type="application/pdf" width="100%" height="100%">
-                </div>
-                '''
-                st.markdown(pdf_html, unsafe_allow_html=True)
-                rendered_native = True
+        with st.spinner("🚀 고화질 PDF를 웹툰처럼 끊김없이 볼 수 있도록 변환 중입니다... (약 2~4초 소요)"):
+            pdf_bytes = get_drive_pdf_bytes(file_id)
+            if pdf_bytes:
+                try:
+                    import fitz  # PyMuPDF 라이브러리 (requirements.txt 에 PyMuPDF 필수)
+                    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+                    
+                    # 이미지를 담을 깔끔한 컨테이너 배경
+                    st.markdown('<div style="background:#f5f5f5; padding:20px; border-radius:12px; border:1px solid #eaeaea; box-shadow:0 10px 30px rgba(0,0,0,0.05);">', unsafe_allow_html=True)
+                    
+                    for page_num in range(len(doc)):
+                        page = doc.load_page(page_num)
+                        # 고화질 렌더링을 위해 줌 2배 적용 및 배경을 흰색으로 강제(투명도 제거)
+                        mat = fitz.Matrix(2.0, 2.0)
+                        pix = page.get_pixmap(matrix=mat, alpha=False)
+                        # use_container_width=True 로 화면 가로폭에 딱 맞게 시원하게 출력
+                        st.image(pix.tobytes("png"), use_container_width=True)
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    rendered_native = True
+                except ImportError:
+                    st.error("💡 완벽한 PDF 렌더링을 위해 `PyMuPDF` 라이브러리가 필요합니다.\n\n터미널에 `pip install PyMuPDF`를 입력하거나, `requirements.txt`에 `PyMuPDF`를 추가해 주세요!")
+                except Exception as e:
+                    st.error(f"PDF 렌더링 중 오류가 발생했습니다: {e}")
 
+    # PyMuPDF가 없거나 변환 실패 시 기존 구글 뷰어로 폴백
     if not rendered_native:
         embed_url = build_embed_url_if_possible(url)
         if embed_url:
-            st.warning("⚠️ 구글 드라이브 기본 뷰어로 렌더링합니다.")
+            st.warning("⚠️ 구글 드라이브 기본 뷰어로 임시 렌더링합니다.")
             st.markdown(f"""
             <div class="pdf-native-container">
                 <iframe src="{embed_url}" allowfullscreen="true"></iframe>
