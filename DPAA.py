@@ -15,7 +15,7 @@ from googleapiclient.http import MediaIoBaseDownload
 # ─────────────────────────────────────────────────────────────
 # 기본 설정 & 스타일
 # ─────────────────────────────────────────────────────────────
-PAGE_TITLE = "드라마 인사이트 아카이브"
+PAGE_TITLE = "드라마 인사이트랩"
 PAGE_ICON = "🎬"
 
 st.set_page_config(
@@ -43,7 +43,6 @@ section[data-testid="stSidebar"] {display:none !important;}
 """
 st.markdown(HIDE_UI, unsafe_allow_html=True)
 
-# ===== CSS 대폭 수정: 뷰어 가로폭 제한 및 페이지 테두리 적용 =====
 CUSTOM_CSS = """
 <style>
 html, body, [class*="css"]  {
@@ -159,7 +158,7 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     width: 100%;
     height: 100%;
     object-fit: cover; 
-    transform: scale(1.10); 
+    transform: scale(1.05); 
     transition: transform 0.3s ease;
 }
 .monthly-card:hover .monthly-thumb {
@@ -235,7 +234,7 @@ a.analysis-card {
    상세 뷰어 공통 및 텍스트 스타일
 ========================================= */
 .viewer-wrapper {
-    max-width: 1100px; /* 너무 꽉 차는 현상을 방지하기 위해 가로폭 제한 */
+    max-width: 1200px; /* 너무 꽉 차는 현상을 방지하기 위해 가로폭 제한 */
     margin: 0 auto;    /* 화면 중앙 정렬 */
 }
 
@@ -556,14 +555,6 @@ def build_embed_url_if_possible(url: str, page_range: str = "") -> str:
 # ─────────────────────────────────────────────────────────────
 def render_home():
     st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="subtitle">
-        드라마 마케팅·인사이트 리포트를 한 곳에 모은 아카이브입니다.<br>
-        상단의 카드에서 보고 싶은 리포트 유형을 선택하세요.
-        </div>
-        """, unsafe_allow_html=True
-    )
 
     monthly_link = "?view=monthly"
     actor_link = "?view=actor_genre"
@@ -575,14 +566,14 @@ def render_home():
             <div class="home-card-tag">MONTHLY</div>
             <div class="home-card-title">월간 드라마 인사이트 리포트</div>
             <div class="home-card-desc">
-              월 단위로 정리한 시장 인사이트, 핵심 작품, 시청자 반응 변화를 다룬 리포트입니다.
+              드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.
             </div>
           </a>
           <a href="{actor_link}" target="_self" class="home-card">
             <div class="home-card-tag">CAST / GENRE</div>
             <div class="home-card-title">배우 / 장르 분석 리포트</div>
             <div class="home-card-desc">
-              IP별 배우 캐스팅 포인트와 장르 포지셔닝을 한눈에 볼 수 있는 리포트입니다.
+              마케팅 관점의 배우분석 및 장르분석 리포트입니다.
             </div>
           </a>
         </div>
@@ -592,7 +583,7 @@ def render_home():
 def render_monthly_list(df_monthly: pd.DataFrame):
     st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">월간 드라마 인사이트 리포트</div>', unsafe_allow_html=True)
-    st.markdown('<div class="detail-subtitle">월 단위 시장 인사이트와 시청자 반응을 분석한 PDF 리포트입니다.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="detail-subtitle">드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.</div>', unsafe_allow_html=True)
 
     if df_monthly.empty:
         st.info("등록된 월간 리포트가 없습니다. 시트를 확인해 주세요.")
@@ -646,7 +637,7 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     rendered_native = False
 
     if file_id:
-        with st.spinner("🚀 고화질 PDF를 웹툰처럼 끊김없이 볼 수 있도록 변환 중입니다... (약 2~4초 소요)"):
+        with st.spinner("🚀 로딩중 (약 2~4초 소요)"):
             pdf_bytes = get_drive_pdf_bytes(file_id)
             if pdf_bytes:
                 try:
@@ -823,14 +814,6 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 def render_actor_genre_list(df: pd.DataFrame):
     st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">배우 / 장르 분석 리포트</div>', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="detail-subtitle">
-        한 작품의 슬라이드 중, 배우 분석/장르 분석에 해당하는 페이지만 따로 모아본 리포트입니다.<br>
-        아래 검색이나 탭에서 유형을 선택하고, 카드 클릭 시 해당 분석 슬라이드가 열립니다.
-        </div>
-        """, unsafe_allow_html=True
-    )
 
     # ===== 데이터에서 존재하는 모든 배우명과 장르 키워드 추출 =====
     actor_list = df[df["actor_range"] != ""]["cast_clean"].str.split(r",\s*").explode().str.strip().dropna().unique().tolist()
