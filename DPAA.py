@@ -158,7 +158,7 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     width: 100%;
     height: 100%;
     object-fit: cover; 
-    transform: scale(1.10); /* 요청하신 1.10 적용 */
+    transform: scale(1.05);
     transition: transform 0.3s ease;
 }
 .monthly-card:hover .monthly-thumb {
