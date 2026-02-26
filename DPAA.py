@@ -880,95 +880,103 @@ def render_actor_genre_list(df: pd.DataFrame):
     # ===== 필터와 리스트 사이의 명확한 구분선 =====
     st.markdown("<hr style='margin: 30px 0; border: none; border-top: 1px solid #eaeaea;'>", unsafe_allow_html=True)
 
+    # ===== 필터 동시 선택 예외 처리 =====
+    if selected_actors and selected_genres:
+        st.warning("⚠️ 배우 필터와 분석주제 필터는 동시에 사용할 수 없습니다. 한 쪽 필터를 비워주세요.")
+
     # ===== 분석 리스트 영역 (좌우 2단 컬럼 분리) =====
     col_actor, col_genre = st.columns(2)
 
     # ===== 2. 캐스팅 분석 리스트 영역 (좌측) =====
     with col_actor:
-        actor_df = df[df["actor_range"] != ""].copy()
-        
-        # 필터 로직
-        if selected_actors:
-            mask = actor_df["cast"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_actors))
-            actor_df = actor_df[mask]
-        if selected_ips:
-            actor_df = actor_df[actor_df["ip"].isin(selected_ips)]
+        # 장르(분석주제) 필터가 비어있을 때만 렌더링
+        if not selected_genres: 
+            actor_df = df[df["actor_range"] != ""].copy()
+            
+            # 필터 로직
+            if selected_actors:
+                mask = actor_df["cast"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_actors))
+                actor_df = actor_df[mask]
+            if selected_ips:
+                actor_df = actor_df[actor_df["ip"].isin(selected_ips)]
 
-        # 배경을 감싸기 위해 전체 HTML을 리스트로 모음 (연한 보라색 배경 추가)
-        actor_html = [
-            '<div style="background-color: #faf5ff; padding: 20px; border-radius: 12px; border: 1px solid #f3e8ff;">',
-            '<div style="background-color: #f5f3ff; padding: 12px 20px; border-radius: 8px; font-weight: 700; font-size: 16px; margin-bottom: 16px; border-left: 5px solid #8b5cf6; color: #4c1d95;">👤 캐스팅 분석</div>'
-        ]
+            # 배경을 감싸기 위해 전체 HTML을 리스트로 모음 (연한 보라색 배경 추가)
+            actor_html = [
+                '<div style="background-color: #faf5ff; padding: 20px; border-radius: 12px; border: 1px solid #f3e8ff;">',
+                '<div style="background-color: #f5f3ff; padding: 12px 20px; border-radius: 8px; font-weight: 700; font-size: 16px; margin-bottom: 16px; border-left: 5px solid #8b5cf6; color: #4c1d95;">👤 캐스팅 분석</div>'
+            ]
 
-        if actor_df.empty:
-            actor_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 캐스팅 분석 페이지가 없습니다.</div>')
-        else:
-            for _, row in actor_df.iterrows():
-                link = f"?view=actor_detail&id={row['row_id']}"
-                ip = row["ip"]
-                cast = row["cast_clean"] or row["cast"]
-                date = row["date"]
-                air = row["air"]
-                
-                date_str = date if date else "미상"
-                air_str = air if air else "미상"
-                meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
-                cast_text = cast if cast else "배우 정보 없음"
-                title_display = f"{cast_text} ({ip})"
+            if actor_df.empty:
+                actor_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 캐스팅 분석 페이지가 없습니다.</div>')
+            else:
+                for _, row in actor_df.iterrows():
+                    link = f"?view=actor_detail&id={row['row_id']}"
+                    ip = row["ip"]
+                    cast = row["cast_clean"] or row["cast"]
+                    date = row["date"]
+                    air = row["air"]
+                    
+                    date_str = date if date else "미상"
+                    air_str = air if air else "미상"
+                    meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
+                    cast_text = cast if cast else "배우 정보 없음"
+                    title_display = f"{cast_text} ({ip})"
 
-                # 들여쓰기로 인한 코드블록 인식 오류를 막기 위해 한 줄 문자열 연결 방식 사용
-                actor_html.append(
-                    f'<a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">'
-                    f'<div class="analysis-title-row"><div class="analysis-ip">{title_display}</div>'
-                    f'<div class="analysis-label">캐스팅 분석</div></div>'
-                    f'<div class="analysis-meta">{meta}</div>'
-                    f'<div class="analysis-sub">작품: {ip}</div></a>'
-                )
-        actor_html.append('</div>')
-        st.markdown("".join(actor_html), unsafe_allow_html=True)
+                    # 들여쓰기로 인한 코드블록 인식 오류를 막기 위해 한 줄 문자열 연결 방식 사용
+                    actor_html.append(
+                        f'<a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">'
+                        f'<div class="analysis-title-row"><div class="analysis-ip">{title_display}</div>'
+                        f'<div class="analysis-label">캐스팅 분석</div></div>'
+                        f'<div class="analysis-meta">{meta}</div>'
+                        f'<div class="analysis-sub">작품: {ip}</div></a>'
+                    )
+            actor_html.append('</div>')
+            st.markdown("".join(actor_html), unsafe_allow_html=True)
 
     # ===== 3. 장르 분석 리스트 영역 (우측) =====
     with col_genre:
-        genre_df = df[df["genre_range"] != ""].copy()
-        
-        # 필터 로직
-        if selected_genres:
-            mask = genre_df["genre_title"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_genres))
-            genre_df = genre_df[mask]
-        if selected_ips:
-            genre_df = genre_df[genre_df["ip"].isin(selected_ips)]
+        # 배우 필터가 비어있을 때만 렌더링
+        if not selected_actors: 
+            genre_df = df[df["genre_range"] != ""].copy()
+            
+            # 필터 로직
+            if selected_genres:
+                mask = genre_df["genre_title"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_genres))
+                genre_df = genre_df[mask]
+            if selected_ips:
+                genre_df = genre_df[genre_df["ip"].isin(selected_ips)]
 
-        # 배경을 감싸기 위해 전체 HTML을 리스트로 모음 (연한 파란색 배경 추가)
-        genre_html = [
-            '<div style="background-color: #f8fbff; padding: 20px; border-radius: 12px; border: 1px solid #e0f2fe;">',
-            '<div style="background-color: #eff6ff; padding: 12px 20px; border-radius: 8px; font-weight: 700; font-size: 16px; margin-bottom: 16px; border-left: 5px solid #4a90e2; color: #1e3a8a;">🏷️ 장르 분석</div>'
-        ]
+            # 배경을 감싸기 위해 전체 HTML을 리스트로 모음 (연한 파란색 배경 추가)
+            genre_html = [
+                '<div style="background-color: #f8fbff; padding: 20px; border-radius: 12px; border: 1px solid #e0f2fe;">',
+                '<div style="background-color: #eff6ff; padding: 12px 20px; border-radius: 8px; font-weight: 700; font-size: 16px; margin-bottom: 16px; border-left: 5px solid #4a90e2; color: #1e3a8a;">🏷️ 장르 분석</div>'
+            ]
 
-        if genre_df.empty:
-            genre_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 장르 분석 페이지가 없습니다.</div>')
-        else:
-            for _, row in genre_df.iterrows():
-                link = f"?view=genre_detail&id={row['row_id']}"
-                ip = row["ip"]
-                title = row["genre_title"] or "장르 분석"
-                date = row["date"]
-                air = row["air"]
+            if genre_df.empty:
+                genre_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 장르 분석 페이지가 없습니다.</div>')
+            else:
+                for _, row in genre_df.iterrows():
+                    link = f"?view=genre_detail&id={row['row_id']}"
+                    ip = row["ip"]
+                    title = row["genre_title"] or "장르 분석"
+                    date = row["date"]
+                    air = row["air"]
 
-                date_str = date if date else "미상"
-                air_str = air if air else "미상"
-                meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
-                title_display = f"{title} ({ip})"
+                    date_str = date if date else "미상"
+                    air_str = air if air else "미상"
+                    meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
+                    title_display = f"{title} ({ip})"
 
-                # 들여쓰기로 인한 코드블록 인식 오류를 막기 위해 한 줄 문자열 연결 방식 사용
-                genre_html.append(
-                    f'<a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">'
-                    f'<div class="analysis-title-row"><div class="analysis-ip">{title_display}</div>'
-                    f'<div class="analysis-label">장르 분석</div></div>'
-                    f'<div class="analysis-meta">{meta}</div>'
-                    f'<div class="analysis-sub">작품: {ip}</div></a>'
-                )
-        genre_html.append('</div>')
-        st.markdown("".join(genre_html), unsafe_allow_html=True)
+                    # 들여쓰기로 인한 코드블록 인식 오류를 막기 위해 한 줄 문자열 연결 방식 사용
+                    genre_html.append(
+                        f'<a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">'
+                        f'<div class="analysis-title-row"><div class="analysis-ip">{title_display}</div>'
+                        f'<div class="analysis-label">장르 분석</div></div>'
+                        f'<div class="analysis-meta">{meta}</div>'
+                        f'<div class="analysis-sub">작품: {ip}</div></a>'
+                    )
+            genre_html.append('</div>')
+            st.markdown("".join(genre_html), unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────
