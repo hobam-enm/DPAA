@@ -1,39 +1,3 @@
-
-# -*- coding: utf-8 -*-
-# 🎬 드라마 인사이트 아카이브 v3 – 썸네일 방식 (페이지 범위 완전 차단 버전)
-#
-# - Google Drive 파일 복사 X (용량/쿼터 이슈 회피)
-# - Google Slides API로 각 페이지를 썸네일 이미지로 받아와서 표시
-#   → 관리 시트 I열 / J열에 적은 "2-3" 범위만 물리적으로 보여줌
-#   → 그 외 슬라이드는 앱 화면에서 전혀 노출되지 않음
-#
-# 📌 전제
-# 1) secrets.toml 에 아래 값이 설정되어 있음
-#
-# ARCHIVE_SHEET_URL = "https://docs.google.com/spreadsheets/d/스프레드시트ID/edit?gid=0#gid=0"
-#
-# [google_api]
-# service_account_json = """{ ... GCP 서비스계정 JSON ... }"""
-#
-# 2) 서비스계정 이메일을
-#    - 관리 시트
-#    - 슬라이드 파일
-#    에 "보기 권한" 이상으로 공유
-#
-# 3) requirements.txt 에 추가
-#    google-api-python-client
-#    google-auth
-#    google-auth-httplib2
-#
-# 📌 동작 요약
-# - 리스트 페이지: 기존과 동일 (배우/장르 분석 카드 목록)
-# - 상세 페이지:
-#   1) 프레젠테이션 ID 추출
-#   2) Slides API로 전체 슬라이드 리스트(objectId) 가져옴
-#   3) I/J열 범위(예: "2-3") → [2,3] → 인덱스로 objectId 선택
-#   4) 각 슬라이드에 대해 thumbnail URL 요청
-#   5) 해당 이미지들만 렌더링 (다른 페이지는 전혀 표시 안 함)
-
 import json
 import re
 from typing import List, Optional
@@ -76,14 +40,16 @@ section[data-testid="stSidebar"] {display:none !important;}
 """
 st.markdown(HIDE_UI, unsafe_allow_html=True)
 
+# ===== 1 & 2. 페이지 배경 흰색 적용 및 메인 카드 좌우 분할/확대 =====
+# 밝은 테마에 맞게 텍스트 컬러, 배경, 그림자를 전면 재조정했습니다.
 CUSTOM_CSS = """
 <style>
 html, body, [class*="css"]  {
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-    color: #e0e0e0;
+    color: #222222; /* 흰색 배경에 맞게 어두운 색으로 변경 */
 }
 [data-testid="stAppViewContainer"] {
-    background-color: #141414;
+    background-color: #ffffff; /* 페이지 배경 전부 흰색으로 변경 */
 }
 
 /* 메인 타이틀 */
@@ -97,129 +63,147 @@ html, body, [class*="css"]  {
     margin-bottom: 8px;
 }
 .subtitle {
-    color: #999;
+    color: #666666; /* 밝은 배경에 맞게 회색으로 변경 */
     font-size: 15px;
     margin-bottom: 30px;
     line-height: 1.5;
 }
 
-/* 홈 카드 */
+/* 홈 카드 (분기점 카드 매우 크게, 좌우 분할) */
 .home-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 24px;
+    grid-template-columns: 1fr 1fr; /* 1:1 비율로 정확히 좌우 분할 */
+    gap: 40px; /* 카드 사이 간격 넓힘 */
     margin-top: 30px;
 }
 .home-card {
     position: relative;
-    padding: 28px 24px;
-    border-radius: 18px;
-    background: radial-gradient(circle at top left, #ff4b4b25, #222);
-    border: 1px solid #333;
-    box-shadow: 0 18px 50px rgba(0,0,0,0.65);
+    height: 400px; /* 카드 높이를 크게 설정 */
+    padding: 40px;
+    border-radius: 24px;
+    background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); /* 깔끔하고 모던한 밝은 그라데이션 */
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.05);
     text-decoration: none;
-    color: #fff;
+    color: #222;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end; /* 텍스트를 카드 하단으로 정렬 */
     transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     cursor: pointer;
 }
 .home-card:hover {
-    transform: translateY(-4px);
+    transform: translateY(-8px);
     border-color: #ff7a50;
-    box-shadow: 0 26px 70px rgba(0,0,0,0.85);
+    box-shadow: 0 30px 60px rgba(0,0,0,0.1); /* 호버 시 입체감 증가 */
 }
 .home-card-title {
-    font-size: 22px;
-    font-weight: 700;
-    margin-bottom: 8px;
+    font-size: 32px; /* 타이틀 크기 대폭 확대 */
+    font-weight: 800;
+    margin-bottom: 12px;
+    z-index: 2;
 }
 .home-card-desc {
-    font-size: 14px;
-    color: #ccc;
-    line-height: 1.5;
+    font-size: 16px;
+    color: #555;
+    line-height: 1.6;
+    z-index: 2;
 }
 .home-card-tag {
     position: absolute;
-    top: 16px;
-    right: 18px;
-    font-size: 11px;
-    color: #ffb199;
-    letter-spacing: 0.06em;
+    top: 30px;
+    right: 30px;
+    font-size: 14px;
+    font-weight: bold;
+    color: #ff4b4b;
+    letter-spacing: 0.1em;
+    z-index: 2;
 }
 
-/* 분석 리스트 카드 */
+/* 분석 리스트 카드 (밝은 테마) */
 .analysis-card {
-    padding: 16px 18px;
-    border-radius: 12px;
-    background: #1b1b1b;
-    border: 1px solid #333;
-    margin-bottom: 12px;
-    transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+    padding: 20px 24px;
+    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid #eaeaea;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    margin-bottom: 16px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 .analysis-card:hover {
     border-color: #ff7a50;
-    background: #222;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
     transform: translateY(-2px);
 }
 .analysis-title-row {
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    margin-bottom: 4px;
+    gap: 12px;
+    margin-bottom: 8px;
 }
 .analysis-ip {
-    font-size: 16px;
-    font-weight: 700;
+    font-size: 18px;
+    font-weight: 800;
+    color: #111;
 }
 .analysis-label {
-    font-size: 11px;
-    padding: 2px 6px;
+    font-size: 12px;
+    padding: 4px 8px;
     border-radius: 999px;
-    border: 1px solid #555;
-    color: #ccc;
+    border: 1px solid #ccc;
+    color: #666;
+    background: #f9f9f9;
 }
 .analysis-meta {
-    font-size: 13px;
-    color: #bbb;
-    margin-bottom: 2px;
+    font-size: 14px;
+    color: #777;
+    margin-bottom: 6px;
 }
 .analysis-sub {
-    font-size: 12px;
-    color: #888;
+    font-size: 14px;
+    color: #444;
+    font-weight: 500;
 }
 
-/* 상세 페이지 */
+/* 상세 페이지 (밝은 테마) */
 .detail-back {
     display: inline-block;
-    padding: 6px 12px;
-    margin: 10px 0 16px 0;
+    padding: 8px 16px;
+    margin: 10px 0 20px 0;
     border-radius: 999px;
-    border: 1px solid #444;
-    font-size: 12px;
-    color: #ddd !important;
+    border: 1px solid #ddd;
+    font-size: 13px;
+    font-weight: 500;
+    color: #444 !important;
     text-decoration: none;
+    background: #fff;
+    transition: all 0.2s;
 }
 .detail-back:hover {
     border-color: #ff7a50;
-    background: #222;
+    color: #ff7a50 !important;
+    background: #fff5f2;
 }
 .detail-title {
-    font-size: 28px;
-    font-weight: 700;
-    margin-bottom: 6px;
+    font-size: 30px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    color: #111;
 }
 .detail-subtitle {
-    font-size: 14px;
-    color: #bbb;
-    margin-bottom: 12px;
+    font-size: 15px;
+    color: #666;
+    margin-bottom: 20px;
+    line-height: 1.6;
 }
 .embed-frame {
     width: 100%;
     border-radius: 12px;
     overflow: hidden;
-    background: #000;
-    border: 1px solid #333;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+    background: #f5f5f5;
+    border: 1px solid #eaeaea;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
     margin-bottom: 18px;
 }
 </style>
@@ -494,8 +478,9 @@ def render_home():
 
 
 def render_monthly_stub():
+    # ===== 3. 현재 창 이동 (target="_self" 추가) =====
     st.markdown(
-        '<a href="?view=home" class="detail-back">← 메인으로 돌아가기</a>',
+        '<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -581,8 +566,9 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
         return
     row = row.iloc[0]
 
+    # ===== 3. 현재 창 이동 (target="_self" 추가) =====
     st.markdown(
-        '<a href="?view=actor_genre" class="detail-back">← 배우/장르 분석 목록으로</a>',
+        '<a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>',
         unsafe_allow_html=True,
     )
 
@@ -590,15 +576,22 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
     cast = row["cast_clean"] or row["cast"]
     date = row["date"]
     air = row["air"]
-    meta = " / ".join([x for x in [date, air] if x])
+
+    # ===== 5. 날짜 포맷 분리 표시 =====
+    date_str = date if date else "미상"
+    air_str = air if air else "미상"
+    meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
+
+    cast_text = cast if cast else "배우 정보 없음"
+    # ===== 4. 타이틀 포맷: 배우이름 (IP명) =====
+    title_display = f"{cast_text} ({ip})"
 
     st.markdown(
-        f'<div class="detail-title">{ip} – 배우 분석</div>',
+        f'<div class="detail-title">{title_display}</div>',
         unsafe_allow_html=True,
     )
-    sub = f"배우: {cast}" if cast else "배우 분석 슬라이드"
     st.markdown(
-        f'<div class="detail-subtitle">{sub}<br>{meta}</div>',
+        f'<div class="detail-subtitle">배우 분석 리포트<br>{meta}</div>',
         unsafe_allow_html=True,
     )
 
@@ -615,8 +608,9 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
         return
     row = row.iloc[0]
 
+    # ===== 3. 현재 창 이동 (target="_self" 추가) =====
     st.markdown(
-        '<a href="?view=actor_genre" class="detail-back">← 배우/장르 분석 목록으로</a>',
+        '<a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>',
         unsafe_allow_html=True,
     )
 
@@ -624,7 +618,11 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
     title = row["genre_title"] or "장르 분석"
     date = row["date"]
     air = row["air"]
-    meta = " / ".join([x for x in [date, air] if x])
+
+    # ===== 5. 날짜 포맷 분리 표시 =====
+    date_str = date if date else "미상"
+    air_str = air if air else "미상"
+    meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
 
     st.markdown(
         f'<div class="detail-title">{ip} – 장르 분석</div>',
@@ -642,8 +640,9 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
 
 def render_actor_genre_list(df: pd.DataFrame):
+    # ===== 3. 현재 창 이동 (target="_self" 추가) =====
     st.markdown(
-        '<a href="?view=home" class="detail-back">← 메인으로 돌아가기</a>',
+        '<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -660,12 +659,25 @@ def render_actor_genre_list(df: pd.DataFrame):
         unsafe_allow_html=True,
     )
 
+    # ===== 6. 배우분석/장르분석 검색 필터 추가 =====
+    search_query = st.text_input(
+        "🔍 리포트 검색 (작품명, 배우, 장르 등 입력)", 
+        placeholder="검색어를 입력하세요..."
+    )
+
     tab_actor, tab_genre = st.tabs(["배우 분석", "장르 분석"])
 
     with tab_actor:
         actor_df = df[df["actor_range"] != ""].copy()
+        
+        # 검색어 기반 필터링 적용 (대소문자 무시)
+        if search_query:
+            mask = actor_df["ip"].str.contains(search_query, case=False, na=False) | \
+                   actor_df["cast"].str.contains(search_query, case=False, na=False)
+            actor_df = actor_df[mask]
+
         if actor_df.empty:
-            st.info("배우 분석 페이지가 설정된 행이 없습니다.")
+            st.info("조건에 맞는 배우 분석 페이지가 없습니다.")
         else:
             for _, row in actor_df.iterrows():
                 link = f"?view=actor_detail&id={row['row_id']}"
@@ -673,19 +685,27 @@ def render_actor_genre_list(df: pd.DataFrame):
                 cast = row["cast_clean"] or row["cast"]
                 date = row["date"]
                 air = row["air"]
-                meta = " / ".join([x for x in [date, air] if x])
-                cast_text = cast if cast else "(배우 정보 없음)"
+                
+                # ===== 5. 날짜 포맷 분리 표시 =====
+                date_str = date if date else "미상"
+                air_str = air if air else "미상"
+                meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
+
+                cast_text = cast if cast else "배우 정보 없음"
+                
+                # ===== 4. 리스트 타이틀 포맷: 배우이름 (IP명) =====
+                title_display = f"{cast_text} ({ip})"
 
                 st.markdown(
                     f"""
                     <a href="{link}" target="_self" style="text-decoration:none;color:inherit;">
                       <div class="analysis-card">
                         <div class="analysis-title-row">
-                          <div class="analysis-ip">{ip}</div>
+                          <div class="analysis-ip">{title_display}</div>
                           <div class="analysis-label">배우 분석</div>
                         </div>
                         <div class="analysis-meta">{meta}</div>
-                        <div class="analysis-sub">배우: {cast_text}</div>
+                        <div class="analysis-sub">작품: {ip}</div>
                       </div>
                     </a>
                     """,
@@ -694,8 +714,15 @@ def render_actor_genre_list(df: pd.DataFrame):
 
     with tab_genre:
         genre_df = df[df["genre_range"] != ""].copy()
+        
+        # 검색어 기반 필터링 적용 (대소문자 무시)
+        if search_query:
+            mask = genre_df["ip"].str.contains(search_query, case=False, na=False) | \
+                   genre_df["genre_title"].str.contains(search_query, case=False, na=False)
+            genre_df = genre_df[mask]
+
         if genre_df.empty:
-            st.info("장르 분석 페이지가 설정된 행이 없습니다.")
+            st.info("조건에 맞는 장르 분석 페이지가 없습니다.")
         else:
             for _, row in genre_df.iterrows():
                 link = f"?view=genre_detail&id={row['row_id']}"
@@ -703,7 +730,11 @@ def render_actor_genre_list(df: pd.DataFrame):
                 title = row["genre_title"] or "장르 분석"
                 date = row["date"]
                 air = row["air"]
-                meta = " / ".join([x for x in [date, air] if x])
+
+                # ===== 5. 날짜 포맷 분리 표시 =====
+                date_str = date if date else "미상"
+                air_str = air if air else "미상"
+                meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
 
                 st.markdown(
                     f"""
