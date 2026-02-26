@@ -40,16 +40,14 @@ section[data-testid="stSidebar"] {display:none !important;}
 """
 st.markdown(HIDE_UI, unsafe_allow_html=True)
 
-# ===== 1 & 2. 페이지 배경 흰색 적용 및 메인 카드 좌우 분할/확대 =====
-# 밝은 테마에 맞게 텍스트 컬러, 배경, 그림자를 전면 재조정했습니다.
 CUSTOM_CSS = """
 <style>
 html, body, [class*="css"]  {
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
-    color: #222222; /* 흰색 배경에 맞게 어두운 색으로 변경 */
+    color: #222222;
 }
 [data-testid="stAppViewContainer"] {
-    background-color: #ffffff; /* 페이지 배경 전부 흰색으로 변경 */
+    background-color: #ffffff;
 }
 
 /* 메인 타이틀 */
@@ -63,25 +61,25 @@ html, body, [class*="css"]  {
     margin-bottom: 8px;
 }
 .subtitle {
-    color: #666666; /* 밝은 배경에 맞게 회색으로 변경 */
+    color: #666666;
     font-size: 15px;
     margin-bottom: 30px;
     line-height: 1.5;
 }
 
-/* 홈 카드 (분기점 카드 매우 크게, 좌우 분할) */
+/* 홈 카드 */
 .home-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr; /* 1:1 비율로 정확히 좌우 분할 */
-    gap: 40px; /* 카드 사이 간격 넓힘 */
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
     margin-top: 30px;
 }
 .home-card {
     position: relative;
-    height: 400px; /* 카드 높이를 크게 설정 */
+    height: 400px;
     padding: 40px;
     border-radius: 24px;
-    background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); /* 깔끔하고 모던한 밝은 그라데이션 */
+    background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
     border: 1px solid #e0e0e0;
     box-shadow: 0 20px 40px rgba(0,0,0,0.05);
     text-decoration: none;
@@ -89,17 +87,17 @@ html, body, [class*="css"]  {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end; /* 텍스트를 카드 하단으로 정렬 */
+    justify-content: flex-end;
     transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     cursor: pointer;
 }
 .home-card:hover {
     transform: translateY(-8px);
     border-color: #ff7a50;
-    box-shadow: 0 30px 60px rgba(0,0,0,0.1); /* 호버 시 입체감 증가 */
+    box-shadow: 0 30px 60px rgba(0,0,0,0.1);
 }
 .home-card-title {
-    font-size: 32px; /* 타이틀 크기 대폭 확대 */
+    font-size: 32px;
     font-weight: 800;
     margin-bottom: 12px;
     z-index: 2;
@@ -121,7 +119,7 @@ html, body, [class*="css"]  {
     z-index: 2;
 }
 
-/* 분석 리스트 카드 (밝은 테마) */
+/* 분석 리스트 카드 */
 .analysis-card {
     padding: 20px 24px;
     border-radius: 16px;
@@ -166,7 +164,7 @@ html, body, [class*="css"]  {
     font-weight: 500;
 }
 
-/* 상세 페이지 (밝은 테마) */
+/* 상세 페이지 */
 .detail-back {
     display: inline-block;
     padding: 8px 16px;
@@ -244,44 +242,32 @@ def load_archive_df() -> pd.DataFrame:
     except Exception:
         return pd.DataFrame()
 
-    # 헤더 매핑
     col_map = {
         "IP": "ip",
         "IP명": "ip",
         "작품명": "ip",
-
         "프레젠테이션주소": "url",
         "프레젠테이션 주소": "url",
         "PPT주소": "url",
         "PPT 주소": "url",
-
         "포스터이미지URL": "img",
         "포스터 이미지URL": "img",
         "포스터 이미지 URL": "img",
-
         "작성월": "date",
         "작성일": "date",
-
         "방영일": "air",
         "방영일자": "air",
-
         "주연배우": "cast",
         "배우명": "cast",
-
-        # 장르/분석 내용 (장르 페이지 제목)
         "장르/분석내용": "genre_title",
         "장르분석제목": "genre_title",
         "장르분석 제목": "genre_title",
-
-        # 배우/장르 페이지 범위
         "배우분석": "actor_range",
         "장르분석": "genre_range",
         "배우분석 페이지범위": "actor_range",
         "배우분석 페이지 범위": "actor_range",
         "장르분석 페이지범위": "genre_range",
         "장르분석 페이지 범위": "genre_range",
-
-        # 선택적으로 존재할 수 있는 URL 컬럼
         "배우분석 URL": "actor_url",
         "장르분석 URL": "genre_url",
         "배우분석URL": "actor_url",
@@ -317,7 +303,6 @@ def load_archive_df() -> pd.DataFrame:
 # ─────────────────────────────────────────────────────────────
 SLIDES_SCOPES = ["https://www.googleapis.com/auth/presentations.readonly"]
 
-
 @st.cache_resource(show_spinner=False)
 def get_slides_service():
     google_api_conf = st.secrets.get("google_api", {})
@@ -336,12 +321,8 @@ def get_slides_service():
         st.warning(f"Slides API 초기화 실패: {e}")
         return None
 
-
 @st.cache_data(ttl=600, show_spinner=False)
 def get_presentation_page_ids(presentation_id: str) -> List[str]:
-    """
-    프레젠테이션 내 슬라이드들의 pageObjectId 리스트를 순서대로 가져옴.
-    """
     service = get_slides_service()
     if service is None:
         return []
@@ -354,12 +335,8 @@ def get_presentation_page_ids(presentation_id: str) -> List[str]:
         st.warning(f"프레젠테이션 메타 로딩 실패: {e}")
         return []
 
-
 @st.cache_data(ttl=600, show_spinner=False)
 def get_slide_thumbnail_url(presentation_id: str, page_object_id: str) -> Optional[str]:
-    """
-    특정 슬라이드(pageObjectId)에 대한 썸네일 이미지 URL 반환.
-    """
     service = get_slides_service()
     if service is None:
         return None
@@ -398,7 +375,6 @@ def parse_page_range(page_range: str) -> List[int]:
         return [int(m.group(1))]
     return []
 
-
 def extract_presentation_id(url: str) -> Optional[str]:
     if not url or "docs.google.com/presentation" not in url:
         return None
@@ -407,14 +383,7 @@ def extract_presentation_id(url: str) -> Optional[str]:
         return None
     return m.group(1)
 
-
 def build_embed_url_if_possible(url: str, page_range: str = "") -> str:
-    """
-    Slides API 사용이 불가능할 때를 위한 fallback.
-    - Google Slides URL이면 embed 링크로 변환 + 첫 페이지부터 시작
-    - PDF면 /preview
-    - 기타는 그대로
-    """
     if not url:
         return ""
     is_pdf = url.lower().endswith(".pdf") or "/file/d/" in url
@@ -478,7 +447,6 @@ def render_home():
 
 
 def render_monthly_stub():
-    # ===== 3. 현재 창 이동 (target="_self" 추가) =====
     st.markdown(
         '<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>',
         unsafe_allow_html=True,
@@ -491,15 +459,8 @@ def render_monthly_stub():
 
 
 def render_slide_range_as_thumbnails(target_url: str, page_range: str):
-    """
-    핵심 함수:
-    - target_url 에서 프레젠테이션 ID 추출
-    - page_range(예: "2-3") 기준으로 해당 페이지들만 썸네일로 렌더링
-    - Slides API 사용 불가 시 iframe embed로 fallback
-    """
     pres_id = extract_presentation_id(target_url)
     if not pres_id:
-        # Slides URL이 아니면 그냥 embed
         embed_url = build_embed_url_if_possible(target_url, page_range)
         if not embed_url:
             st.warning("연결된 프레젠테이션 링크가 없습니다.")
@@ -509,10 +470,8 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    # 페이지 범위 파싱
     pages = parse_page_range(page_range)
     if not pages:
-        # 범위 명시가 없으면 전체를 embed로 fallback
         embed_url = build_embed_url_if_possible(target_url, page_range)
         if not embed_url:
             st.warning("페이지 범위가 설정되지 않았고, 프레젠테이션을 불러올 수 없습니다.")
@@ -522,16 +481,13 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    # Slides API로 pageObjectId 리스트 가져오기
     page_ids = get_presentation_page_ids(pres_id)
     if not page_ids:
-        # 메타를 못 가져오면 embed fallback
         embed_url = build_embed_url_if_possible(target_url, page_range)
         if not embed_url:
             st.warning("프레젠테이션 정보를 불러오지 못했습니다.")
             return
     else:
-        # 요청한 범위 내에서만 썸네일 렌더링
         rendered_any = False
         for p in pages:
             idx = p - 1
@@ -549,7 +505,6 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
         if rendered_any:
             return
 
-        # 여기까지 왔는데도 아무것도 못 그렸다면 embed fallback
         embed_url = build_embed_url_if_possible(target_url, page_range)
         if embed_url:
             st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
@@ -566,7 +521,6 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
         return
     row = row.iloc[0]
 
-    # ===== 3. 현재 창 이동 (target="_self" 추가) =====
     st.markdown(
         '<a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>',
         unsafe_allow_html=True,
@@ -577,13 +531,11 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
     date = row["date"]
     air = row["air"]
 
-    # ===== 5. 날짜 포맷 분리 표시 =====
     date_str = date if date else "미상"
     air_str = air if air else "미상"
     meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
 
     cast_text = cast if cast else "배우 정보 없음"
-    # ===== 4. 타이틀 포맷: 배우이름 (IP명) =====
     title_display = f"{cast_text} ({ip})"
 
     st.markdown(
@@ -608,7 +560,6 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
         return
     row = row.iloc[0]
 
-    # ===== 3. 현재 창 이동 (target="_self" 추가) =====
     st.markdown(
         '<a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>',
         unsafe_allow_html=True,
@@ -619,17 +570,19 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
     date = row["date"]
     air = row["air"]
 
-    # ===== 5. 날짜 포맷 분리 표시 =====
     date_str = date if date else "미상"
     air_str = air if air else "미상"
     meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
 
+    # ===== 1. 장르 분석 상세 페이지 타이틀 포맷 수정 =====
+    title_display = f"{title} ({ip})"
+
     st.markdown(
-        f'<div class="detail-title">{ip} – 장르 분석</div>',
+        f'<div class="detail-title">{title_display}</div>',
         unsafe_allow_html=True,
     )
     st.markdown(
-        f'<div class="detail-subtitle">{title}<br>{meta}</div>',
+        f'<div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>',
         unsafe_allow_html=True,
     )
 
@@ -640,7 +593,6 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
 
 def render_actor_genre_list(df: pd.DataFrame):
-    # ===== 3. 현재 창 이동 (target="_self" 추가) =====
     st.markdown(
         '<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>',
         unsafe_allow_html=True,
@@ -653,28 +605,43 @@ def render_actor_genre_list(df: pd.DataFrame):
         """
         <div class="detail-subtitle">
         한 작품의 슬라이드 중, 배우 분석/장르 분석에 해당하는 페이지만 따로 모아본 리포트입니다.<br>
-        아래 탭에서 유형을 선택하고, 카드 클릭 시 해당 분석 슬라이드가 열립니다.
+        아래 검색이나 탭에서 유형을 선택하고, 카드 클릭 시 해당 분석 슬라이드가 열립니다.
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # ===== 6. 배우분석/장르분석 검색 필터 추가 =====
-    search_query = st.text_input(
-        "🔍 리포트 검색 (작품명, 배우, 장르 등 입력)", 
-        placeholder="검색어를 입력하세요..."
-    )
+    # ===== 2. 검색 및 필터 리스트(다중 선택) 영역 =====
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        search_query = st.text_input(
+            "🔍 텍스트 검색 (배우, 장르 등)", 
+            placeholder="검색어를 입력하세요..."
+        )
+    
+    with col2:
+        # 등록된 전체 작품명 중복 없이 리스트화
+        unique_ips = sorted(df["ip"].dropna().unique().tolist())
+        selected_ips = st.multiselect(
+            "📌 작품명 필터 (리스트 선택)",
+            options=unique_ips,
+            default=[]
+        )
 
     tab_actor, tab_genre = st.tabs(["배우 분석", "장르 분석"])
 
     with tab_actor:
         actor_df = df[df["actor_range"] != ""].copy()
         
-        # 검색어 기반 필터링 적용 (대소문자 무시)
+        # 텍스트 검색 및 드롭다운 선택 필터링 적용
         if search_query:
             mask = actor_df["ip"].str.contains(search_query, case=False, na=False) | \
                    actor_df["cast"].str.contains(search_query, case=False, na=False)
             actor_df = actor_df[mask]
+        
+        if selected_ips:
+            actor_df = actor_df[actor_df["ip"].isin(selected_ips)]
 
         if actor_df.empty:
             st.info("조건에 맞는 배우 분석 페이지가 없습니다.")
@@ -686,14 +653,11 @@ def render_actor_genre_list(df: pd.DataFrame):
                 date = row["date"]
                 air = row["air"]
                 
-                # ===== 5. 날짜 포맷 분리 표시 =====
                 date_str = date if date else "미상"
                 air_str = air if air else "미상"
                 meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
 
                 cast_text = cast if cast else "배우 정보 없음"
-                
-                # ===== 4. 리스트 타이틀 포맷: 배우이름 (IP명) =====
                 title_display = f"{cast_text} ({ip})"
 
                 st.markdown(
@@ -715,11 +679,14 @@ def render_actor_genre_list(df: pd.DataFrame):
     with tab_genre:
         genre_df = df[df["genre_range"] != ""].copy()
         
-        # 검색어 기반 필터링 적용 (대소문자 무시)
+        # 텍스트 검색 및 드롭다운 선택 필터링 적용
         if search_query:
             mask = genre_df["ip"].str.contains(search_query, case=False, na=False) | \
                    genre_df["genre_title"].str.contains(search_query, case=False, na=False)
             genre_df = genre_df[mask]
+            
+        if selected_ips:
+            genre_df = genre_df[genre_df["ip"].isin(selected_ips)]
 
         if genre_df.empty:
             st.info("조건에 맞는 장르 분석 페이지가 없습니다.")
@@ -731,21 +698,23 @@ def render_actor_genre_list(df: pd.DataFrame):
                 date = row["date"]
                 air = row["air"]
 
-                # ===== 5. 날짜 포맷 분리 표시 =====
                 date_str = date if date else "미상"
                 air_str = air if air else "미상"
                 meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
+
+                # ===== 1. 장르 분석 리스트 타이틀 포맷 수정 =====
+                title_display = f"{title} ({ip})"
 
                 st.markdown(
                     f"""
                     <a href="{link}" target="_self" style="text-decoration:none;color:inherit;">
                       <div class="analysis-card">
                         <div class="analysis-title-row">
-                          <div class="analysis-ip">{ip}</div>
+                          <div class="analysis-ip">{title_display}</div>
                           <div class="analysis-label">장르 분석</div>
                         </div>
                         <div class="analysis-meta">{meta}</div>
-                        <div class="analysis-sub">{title}</div>
+                        <div class="analysis-sub">작품: {ip}</div>
                       </div>
                     </a>
                     """,
