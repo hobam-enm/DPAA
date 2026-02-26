@@ -40,7 +40,7 @@ section[data-testid="stSidebar"] {display:none !important;}
 """
 st.markdown(HIDE_UI, unsafe_allow_html=True)
 
-# ===== CSS 대폭 수정: 링크 기본스타일 제거, 썸네일 꽉채우기, 16:9 비율 고정 iframe =====
+# ===== CSS 대폭 수정: 강제 확대(Scale) 트릭 적용 =====
 CUSTOM_CSS = """
 <style>
 html, body, [class*="css"]  {
@@ -125,7 +125,6 @@ html, body, [class*="css"]  {
     gap: 24px;
     margin-top: 20px;
 }
-/* 파란색 밑줄 강제 제거 */
 a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     text-decoration: none !important;
     color: inherit !important;
@@ -145,14 +144,25 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     box-shadow: 0 12px 30px rgba(0,0,0,0.08);
     border-color: #ff7a50;
 }
-/* 썸네일을 16:9 비율로 맞추고 꽉 채우기 (cover) */
+
+/* 썸네일 강제 확대 (여백 자르기) */
+.monthly-thumb-box {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden; /* 확대된 부분이 카드 밖으로 나가지 않게 자름 */
+    border-bottom: 1px solid #eaeaea;
+}
 .monthly-thumb {
     width: 100%;
-    aspect-ratio: 16 / 9; 
+    height: 100%;
     object-fit: cover; 
-    border-bottom: 1px solid #eaeaea;
-    display: block;
+    transform: scale(1.15); /* 15% 강제 확대 */
+    transition: transform 0.3s ease;
 }
+.monthly-card:hover .monthly-thumb {
+    transform: scale(1.20); /* 마우스 오버 시 살짝 더 줌인 */
+}
+
 .monthly-info {
     padding: 20px;
 }
@@ -249,12 +259,11 @@ a.analysis-card {
     line-height: 1.6;
 }
 
-/* iframe 16:9 비율 고정 (블랙바 완벽 제거 트릭) */
+/* 일반 임베드 컨테이너 */
 .embed-container {
     position: relative;
     width: 100%;
-    padding-bottom: 56.25%; /* 16:9 비율 설정 */
-    height: 0;
+    padding-bottom: 56.25%; /* 16:9 */
     overflow: hidden;
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.05);
@@ -269,6 +278,29 @@ a.analysis-card {
     width: 100%;
     height: 100%;
     border: 0;
+}
+
+/* PDF 전용 강제 확대 임베드 컨테이너 (블랙바 완전 제거) */
+.pdf-embed-container {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%; 
+    overflow: hidden;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+    background: #1e1e1e;
+    border: 1px solid #eaeaea;
+    margin-bottom: 18px;
+}
+.pdf-embed-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    transform: scale(1.18); /* iframe 내부의 검은테두리와 툴바를 화면 밖으로 밀어냄 */
+    transform-origin: center center;
 }
 </style>
 """
@@ -431,7 +463,11 @@ def get_drive_thumbnail_url(file_id: str) -> Optional[str]:
     if service is None: return None
     try:
         file_meta = service.files().get(fileId=file_id, fields="thumbnailLink").execute()
-        return file_meta.get("thumbnailLink")
+        link = file_meta.get("thumbnailLink")
+        if link:
+            # 강제 확대 시 이미지가 깨지지 않도록, API 호출 URL 파라미터를 고해상도(s1000)로 변환
+            link = re.sub(r'=s\d+$', '=s1000', link)
+        return link
     except Exception as e:
         return None
 
@@ -545,8 +581,8 @@ def render_monthly_list(df_monthly: pd.DataFrame):
 
         link = f"?view=monthly_detail&id={row['row_id']}"
         
-        # HTML을 한 줄로 압축하여 Streamlit Markdown 파서의 코드블록 인식 오류 원천 차단
-        card_html = f'<a href="{link}" target="_self" class="monthly-card"><img src="{thumb_url}" class="monthly-thumb" alt="{title}"><div class="monthly-info"><div class="monthly-title">{title}</div><div class="monthly-date">발행시점 : {date}</div></div></a>'
+        # monthly-thumb-box 래퍼를 추가하여 확대된 썸네일이 카드를 넘지 않게 처리
+        card_html = f'<a href="{link}" target="_self" class="monthly-card"><div class="monthly-thumb-box"><img src="{thumb_url}" class="monthly-thumb" alt="{title}"></div><div class="monthly-info"><div class="monthly-title">{title}</div><div class="monthly-date">발행시점 : {date}</div></div></a>'
         cols_html.append(card_html)
         
     cols_html.append("</div>")
@@ -570,9 +606,9 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
 
     embed_url = build_embed_url_if_possible(url)
     if embed_url:
-        # 블랙바 제거를 위해 16:9 비율 컨테이너(embed-container) 사용
+        # PDF 전용 강제 확대 컨테이너(pdf-embed-container) 사용
         st.markdown(f"""
-        <div class="embed-container">
+        <div class="pdf-embed-container">
             <iframe src="{embed_url}" allowfullscreen="true"></iframe>
         </div>
         """, unsafe_allow_html=True)
@@ -621,7 +657,6 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
                 thumb_url = get_slide_thumbnail_url(pres_id, page_obj_id)
                 if thumb_url:
                     rendered_any = True
-                    # 썸네일도 블랙바 없는 16:9 컨테이너에 맞춤
                     st.markdown(f"""
                     <div class="embed-container" style="background:transparent; border:none; box-shadow:none; margin-bottom:12px;">
                         <img src="{thumb_url}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; border-radius:12px; border:1px solid #eaeaea; box-shadow:0 10px 30px rgba(0,0,0,0.05);">
