@@ -596,9 +596,9 @@ def render_home():
           </a>
           <a href="{actor_link}" target="_self" class="home-card card-actor">
             <div class="home-card-tag">CAST / GENRE</div>
-            <div class="home-card-title">배우 / 장르 분석 리포트</div>
+            <div class="home-card-title">캐스팅 / 장르 분석 리포트</div>
             <div class="home-card-desc">
-              마케팅 관점의 배우분석 및 장르분석 리포트입니다.
+              마케팅 관점의 배우-캐스팅분석 및 장르분석 리포트입니다.
             </div>
           </a>
         </div>
@@ -792,9 +792,9 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
 
     st.markdown(f'''
     <div class="viewer-wrapper">
-        <a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>
+        <a href="?view=actor_genre" target="_self" class="detail-back">← 캐스팅/장르 분석 목록으로</a>
         <div class="detail-title">{title_display}</div>
-        <div class="detail-subtitle">배우 분석 리포트<br>{meta}</div>
+        <div class="detail-subtitle">캐스팅 분석 리포트<br>{meta}</div>
     </div>
     ''', unsafe_allow_html=True)
 
@@ -824,7 +824,7 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
     st.markdown(f'''
     <div class="viewer-wrapper">
-        <a href="?view=actor_genre" target="_self" class="detail-back">← 배우/장르 분석 목록으로</a>
+        <a href="?view=actor_genre" target="_self" class="detail-back">← 캐스팅/장르 분석 목록으로</a>
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>
     </div>
@@ -838,7 +838,7 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
 def render_actor_genre_list(df: pd.DataFrame):
     st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
-    st.markdown('<div class="detail-title">배우 / 장르 분석 리포트</div>', unsafe_allow_html=True)
+    st.markdown('<div class="detail-title">캐스킹 / 장르 분석 리포트</div>', unsafe_allow_html=True)
 
     # ===== 데이터에서 존재하는 모든 배우명과 장르 키워드 추출 =====
     actor_list = df[df["actor_range"] != ""]["cast_clean"].str.split(r",\s*").explode().str.strip().dropna().unique().tolist()
@@ -854,7 +854,7 @@ def render_actor_genre_list(df: pd.DataFrame):
         unique_ips = sorted(df["ip"].dropna().unique().tolist())
         selected_ips = st.multiselect("📌 작품명 필터", options=unique_ips, default=[])
 
-    tab_actor, tab_genre = st.tabs(["배우 분석", "장르 분석"])
+    tab_actor, tab_genre = st.tabs(["캐스팅 분석", "장르 분석"])
 
     with tab_actor:
         actor_df = df[df["actor_range"] != ""].copy()
