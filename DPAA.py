@@ -852,7 +852,6 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
 
 # ===== 캐스팅 / 장르 분석 리스트 렌더링 =====
-# ===== 캐스팅 / 장르 분석 리스트 렌더링 =====
 def render_actor_genre_list(df: pd.DataFrame):
     st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">캐스팅 / 장르 분석 리포트</div>', unsafe_allow_html=True)
@@ -866,22 +865,17 @@ def render_actor_genre_list(df: pd.DataFrame):
     
     unique_ips = sorted(df["ip"].dropna().unique().tolist())
 
-    # ===== 1. 필터 영역 시각적 구분 헤더 =====
-    st.markdown(
-        '<div style="background-color: #f9fafb; padding: 12px 20px; border-radius: 8px; font-weight: 700; font-size: 16px; margin-top: 20px; margin-bottom: 16px; border-left: 5px solid #6b7280; color: #374151;">'
-        '🔍 통합 검색 필터'
-        '</div>', 
-        unsafe_allow_html=True
-    )
-
-    # ===== 필터 영역 컨텐츠 (배우, 분석주제, 작품명 3단 분리) =====
-    col_filter1, col_filter2, col_filter3 = st.columns(3)
+    # ===== 통합 검색 필터 영역 (4단 분할로 좌측 몰기) =====
+    col_filter1, col_filter2, col_filter3, col_dummy = st.columns([1, 1, 1, 1.5])
+    
     with col_filter1:
         selected_actors = st.multiselect("👤 배우 필터", options=actor_list, default=[])
     with col_filter2:
         selected_genres = st.multiselect("🏷️ 분석주제 필터", options=genre_list, default=[])
     with col_filter3:
         selected_ips = st.multiselect("📌 작품명 필터", options=unique_ips, default=[])
+    with col_dummy:
+        pass # 우측 여백을 위한 투명(더미) 공간
 
     # ===== 필터와 리스트 사이의 명확한 구분선 =====
     st.markdown("<hr style='margin: 30px 0; border: none; border-top: 1px solid #eaeaea;'>", unsafe_allow_html=True)
@@ -891,28 +885,23 @@ def render_actor_genre_list(df: pd.DataFrame):
 
     # ===== 2. 캐스팅 분석 리스트 영역 (좌측) =====
     with col_actor:
-        # 보라색 테마의 시각적 구분 타이틀
-        st.markdown(
-            '<div style="background-color: #f5f3ff; padding: 12px 20px; border-radius: 8px; font-weight: 700; font-size: 16px; margin-bottom: 16px; border-left: 5px solid #8b5cf6; color: #4c1d95;">'
-            '👤 캐스팅 분석'
-            '</div>', 
-            unsafe_allow_html=True
-        )
-        
         actor_df = df[df["actor_range"] != ""].copy()
         
-        # 필터 로직: 배우명에 포함 여부
+        # 필터 로직
         if selected_actors:
             mask = actor_df["cast"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_actors))
             actor_df = actor_df[mask]
-        
-        # 필터 로직: 작품명 일치 여부
         if selected_ips:
             actor_df = actor_df[actor_df["ip"].isin(selected_ips)]
 
-        # 결과 렌더링
+        # 배경을 감싸기 위해 전체 HTML을 리스트로 모음 (연한 보라색 배경 추가)
+        actor_html = [
+            '<div style="background-color: #faf5ff; padding: 20px; border-radius: 12px; border: 1px solid #f3e8ff;">',
+            '<div style="background-color: #f5f3ff; padding: 12px 20px; border-radius: 8px; font-weight: 700; font-size: 16px; margin-bottom: 16px; border-left: 5px solid #8b5cf6; color: #4c1d95;">👤 캐스팅 분석</div>'
+        ]
+
         if actor_df.empty:
-            st.info("조건에 맞는 캐스팅 분석 페이지가 없습니다.")
+            actor_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 캐스팅 분석 페이지가 없습니다.</div>')
         else:
             for _, row in actor_df.iterrows():
                 link = f"?view=actor_detail&id={row['row_id']}"
@@ -924,13 +913,12 @@ def render_actor_genre_list(df: pd.DataFrame):
                 date_str = date if date else "미상"
                 air_str = air if air else "미상"
                 meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
-
                 cast_text = cast if cast else "배우 정보 없음"
                 title_display = f"{cast_text} ({ip})"
 
-                st.markdown(
+                actor_html.append(
                     f"""
-                    <a href="{link}" target="_self" class="analysis-card">
+                    <a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">
                       <div class="analysis-title-row">
                         <div class="analysis-ip">{title_display}</div>
                         <div class="analysis-label">캐스팅 분석</div>
@@ -938,33 +926,30 @@ def render_actor_genre_list(df: pd.DataFrame):
                       <div class="analysis-meta">{meta}</div>
                       <div class="analysis-sub">작품: {ip}</div>
                     </a>
-                    """, unsafe_allow_html=True
+                    """
                 )
+        actor_html.append('</div>')
+        st.markdown("".join(actor_html), unsafe_allow_html=True)
 
     # ===== 3. 장르 분석 리스트 영역 (우측) =====
     with col_genre:
-        # 파란색 테마의 시각적 구분 타이틀
-        st.markdown(
-            '<div style="background-color: #eff6ff; padding: 12px 20px; border-radius: 8px; font-weight: 700; font-size: 16px; margin-bottom: 16px; border-left: 5px solid #4a90e2; color: #1e3a8a;">'
-            '🏷️ 장르 분석'
-            '</div>', 
-            unsafe_allow_html=True
-        )
-        
         genre_df = df[df["genre_range"] != ""].copy()
         
-        # 필터 로직: 분석주제 포함 여부
+        # 필터 로직
         if selected_genres:
             mask = genre_df["genre_title"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_genres))
             genre_df = genre_df[mask]
-            
-        # 필터 로직: 작품명 일치 여부
         if selected_ips:
             genre_df = genre_df[genre_df["ip"].isin(selected_ips)]
 
-        # 결과 렌더링
+        # 배경을 감싸기 위해 전체 HTML을 리스트로 모음 (연한 파란색 배경 추가)
+        genre_html = [
+            '<div style="background-color: #f8fbff; padding: 20px; border-radius: 12px; border: 1px solid #e0f2fe;">',
+            '<div style="background-color: #eff6ff; padding: 12px 20px; border-radius: 8px; font-weight: 700; font-size: 16px; margin-bottom: 16px; border-left: 5px solid #4a90e2; color: #1e3a8a;">🏷️ 장르 분석</div>'
+        ]
+
         if genre_df.empty:
-            st.info("조건에 맞는 장르 분석 페이지가 없습니다.")
+            genre_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 장르 분석 페이지가 없습니다.</div>')
         else:
             for _, row in genre_df.iterrows():
                 link = f"?view=genre_detail&id={row['row_id']}"
@@ -976,12 +961,11 @@ def render_actor_genre_list(df: pd.DataFrame):
                 date_str = date if date else "미상"
                 air_str = air if air else "미상"
                 meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
-
                 title_display = f"{title} ({ip})"
 
-                st.markdown(
+                genre_html.append(
                     f"""
-                    <a href="{link}" target="_self" class="analysis-card">
+                    <a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">
                       <div class="analysis-title-row">
                         <div class="analysis-ip">{title_display}</div>
                         <div class="analysis-label">장르 분석</div>
@@ -989,8 +973,10 @@ def render_actor_genre_list(df: pd.DataFrame):
                       <div class="analysis-meta">{meta}</div>
                       <div class="analysis-sub">작품: {ip}</div>
                     </a>
-                    """, unsafe_allow_html=True
+                    """
                 )
+        genre_html.append('</div>')
+        st.markdown("".join(genre_html), unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────
