@@ -916,17 +916,13 @@ def render_actor_genre_list(df: pd.DataFrame):
                 cast_text = cast if cast else "배우 정보 없음"
                 title_display = f"{cast_text} ({ip})"
 
+                # 들여쓰기로 인한 코드블록 인식 오류를 막기 위해 한 줄 문자열 연결 방식 사용
                 actor_html.append(
-                    f"""
-                    <a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">
-                      <div class="analysis-title-row">
-                        <div class="analysis-ip">{title_display}</div>
-                        <div class="analysis-label">캐스팅 분석</div>
-                      </div>
-                      <div class="analysis-meta">{meta}</div>
-                      <div class="analysis-sub">작품: {ip}</div>
-                    </a>
-                    """
+                    f'<a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">'
+                    f'<div class="analysis-title-row"><div class="analysis-ip">{title_display}</div>'
+                    f'<div class="analysis-label">캐스팅 분석</div></div>'
+                    f'<div class="analysis-meta">{meta}</div>'
+                    f'<div class="analysis-sub">작품: {ip}</div></a>'
                 )
         actor_html.append('</div>')
         st.markdown("".join(actor_html), unsafe_allow_html=True)
@@ -963,17 +959,13 @@ def render_actor_genre_list(df: pd.DataFrame):
                 meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
                 title_display = f"{title} ({ip})"
 
+                # 들여쓰기로 인한 코드블록 인식 오류를 막기 위해 한 줄 문자열 연결 방식 사용
                 genre_html.append(
-                    f"""
-                    <a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">
-                      <div class="analysis-title-row">
-                        <div class="analysis-ip">{title_display}</div>
-                        <div class="analysis-label">장르 분석</div>
-                      </div>
-                      <div class="analysis-meta">{meta}</div>
-                      <div class="analysis-sub">작품: {ip}</div>
-                    </a>
-                    """
+                    f'<a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">'
+                    f'<div class="analysis-title-row"><div class="analysis-ip">{title_display}</div>'
+                    f'<div class="analysis-label">장르 분석</div></div>'
+                    f'<div class="analysis-meta">{meta}</div>'
+                    f'<div class="analysis-sub">작품: {ip}</div></a>'
                 )
         genre_html.append('</div>')
         st.markdown("".join(genre_html), unsafe_allow_html=True)
