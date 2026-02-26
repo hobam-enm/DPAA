@@ -16,7 +16,7 @@ from googleapiclient.http import MediaIoBaseDownload
 # 기본 설정 & 스타일
 # ─────────────────────────────────────────────────────────────
 PAGE_TITLE = "드라마 인사이트랩"
-PAGE_ICON = "🎬"
+PAGE_ICON = "🔬"
 
 st.set_page_config(
     page_title=PAGE_TITLE,
@@ -570,7 +570,7 @@ def build_embed_url_if_possible(url: str, page_range: str = "") -> str:
 # 렌더링 – 홈 / 월간 / 배우·장르 리스트 / 상세
 # ─────────────────────────────────────────────────────────────
 def render_home():
-    st.markdown(f'<div class="main-title">{PAGE_TITLE}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="main-title">🔬 {PAGE_TITLE}</div>', unsafe_allow_html=True)
 
     monthly_link = "?view=monthly"
     actor_link = "?view=actor_genre"
