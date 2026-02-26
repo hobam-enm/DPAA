@@ -70,14 +70,14 @@ html, body, [class*="css"]  {
 }
 
 .home-grid {
-    grid-template-columns: 600px 600px;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 40px;
     margin-top: 30px;
 }
 .home-card {
     position: relative;
-    height: 400px;
+    height: 500px;
     padding: 40px;
     border-radius: 24px;
     border: 1px solid #e0e0e0;
