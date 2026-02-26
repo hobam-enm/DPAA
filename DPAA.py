@@ -734,12 +734,8 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
                 thumb_url = get_slide_thumbnail_url(pres_id, page_obj_id)
                 if thumb_url:
                     rendered_any = True
-                    # 배우/장르 슬라이드 이미지도 동일한 가벼운 테두리 및 그림자 적용
-                    html_blocks.append(f"""
-                    <div class="embed-container" style="background:transparent; border:none; box-shadow:none; margin-bottom:30px;">
-                        <img src="{thumb_url}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; border-radius:6px; border:1px solid #d4d4d4; box-shadow:0 4px 12px rgba(0,0,0,0.06);">
-                    </div>
-                    """)
+                    # 마크다운 파서 오류(코드블록 노출)를 방지하기 위해 HTML을 한 줄로 압축
+                    html_blocks.append(f'<div class="embed-container" style="background:transparent; border:none; box-shadow:none; margin-bottom:30px;"><img src="{thumb_url}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; border-radius:6px; border:1px solid #d4d4d4; box-shadow:0 4px 12px rgba(0,0,0,0.06);"></div>')
         html_blocks.append('</div>')
         
         if rendered_any:
@@ -836,22 +832,31 @@ def render_actor_genre_list(df: pd.DataFrame):
         """, unsafe_allow_html=True
     )
 
+    # ===== 데이터에서 존재하는 모든 배우명과 장르 키워드 추출 =====
+    actor_list = df[df["actor_range"] != ""]["cast_clean"].str.split(r",\s*").explode().str.strip().dropna().unique().tolist()
+    genre_list = df[df["genre_range"] != ""]["genre_title"].str.strip().dropna().unique().tolist()
+    # 중복 제거 및 빈 값 필터링 후 정렬
+    combined_keywords = sorted(list(set([k for k in (actor_list + genre_list) if k])))
+
+    # ===== 필터 영역 (텍스트 입력 -> 드롭다운 다중 선택으로 변경) =====
     col1, col2 = st.columns(2)
     with col1:
-        search_query = st.text_input("🔍 텍스트 검색 (배우, 장르 등)", placeholder="검색어를 입력하세요...")
+        selected_keywords = st.multiselect("🔍 배우 / 분석주제 필터", options=combined_keywords, default=[])
     with col2:
         unique_ips = sorted(df["ip"].dropna().unique().tolist())
-        selected_ips = st.multiselect("📌 작품명 필터 (리스트 선택)", options=unique_ips, default=[])
+        selected_ips = st.multiselect("📌 작품명 필터", options=unique_ips, default=[])
 
     tab_actor, tab_genre = st.tabs(["배우 분석", "장르 분석"])
 
     with tab_actor:
         actor_df = df[df["actor_range"] != ""].copy()
-        if search_query:
-            mask = actor_df["ip"].str.contains(search_query, case=False, na=False) | \
-                   actor_df["cast"].str.contains(search_query, case=False, na=False)
+        
+        # 키워드 필터 적용 (배우명에 포함되어 있는지 검사)
+        if selected_keywords:
+            mask = actor_df["cast"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_keywords))
             actor_df = actor_df[mask]
         
+        # 작품명 필터 적용
         if selected_ips:
             actor_df = actor_df[actor_df["ip"].isin(selected_ips)]
 
@@ -887,11 +892,13 @@ def render_actor_genre_list(df: pd.DataFrame):
 
     with tab_genre:
         genre_df = df[df["genre_range"] != ""].copy()
-        if search_query:
-            mask = genre_df["ip"].str.contains(search_query, case=False, na=False) | \
-                   genre_df["genre_title"].str.contains(search_query, case=False, na=False)
+        
+        # 키워드 필터 적용 (장르/분석주제에 포함되어 있는지 검사)
+        if selected_keywords:
+            mask = genre_df["genre_title"].apply(lambda x: any(k.lower() in str(x).lower() for k in selected_keywords))
             genre_df = genre_df[mask]
             
+        # 작품명 필터 적용
         if selected_ips:
             genre_df = genre_df[genre_df["ip"].isin(selected_ips)]
 
