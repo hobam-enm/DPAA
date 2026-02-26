@@ -40,6 +40,7 @@ section[data-testid="stSidebar"] {display:none !important;}
 """
 st.markdown(HIDE_UI, unsafe_allow_html=True)
 
+# ===== CSS 수정: 썸네일 비율 및 embed-frame 배경 조정 =====
 CUSTOM_CSS = """
 <style>
 html, body, [class*="css"]  {
@@ -50,7 +51,6 @@ html, body, [class*="css"]  {
     background-color: #ffffff;
 }
 
-/* 메인 타이틀 */
 .main-title {
     font-size: 34px;
     font-weight: 800;
@@ -67,7 +67,6 @@ html, body, [class*="css"]  {
     line-height: 1.5;
 }
 
-/* 홈 카드 */
 .home-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -119,10 +118,9 @@ html, body, [class*="css"]  {
     z-index: 2;
 }
 
-/* 월간 리포트 썸네일 카드 (PDF 전용) */
 .monthly-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 24px;
     margin-top: 20px;
 }
@@ -143,11 +141,11 @@ html, body, [class*="css"]  {
     box-shadow: 0 12px 30px rgba(0,0,0,0.08);
     border-color: #ff7a50;
 }
+/* 1. 썸네일 비율 16:9 및 contain으로 조정 (여백 최소화) */
 .monthly-thumb {
     width: 100%;
-    height: 380px; /* 세로형 PDF에 맞춘 비율 */
-    object-fit: cover;
-    object-position: top;
+    aspect-ratio: 16 / 9; 
+    object-fit: contain;
     background: #f5f5f5;
     border-bottom: 1px solid #eaeaea;
 }
@@ -166,7 +164,6 @@ html, body, [class*="css"]  {
     color: #777;
 }
 
-/* 분석 리스트 카드 */
 .analysis-card {
     padding: 20px 24px;
     border-radius: 16px;
@@ -211,7 +208,6 @@ html, body, [class*="css"]  {
     font-weight: 500;
 }
 
-/* 상세 페이지 */
 .detail-back {
     display: inline-block;
     padding: 8px 16px;
@@ -242,11 +238,12 @@ html, body, [class*="css"]  {
     margin-bottom: 20px;
     line-height: 1.6;
 }
+/* 3. embed-frame 배경을 검정으로 하여 PDF 뷰어와 위화감 제거 */
 .embed-frame {
     width: 100%;
     border-radius: 12px;
     overflow: hidden;
-    background: #f5f5f5;
+    background: #1e1e1e;
     border: 1px solid #eaeaea;
     box-shadow: 0 10px 30px rgba(0,0,0,0.05);
     margin-bottom: 18px;
@@ -321,13 +318,8 @@ def load_archive_df() -> pd.DataFrame:
     df["row_id"] = df.index.astype(str)
     return df
 
-# ===== 추가: 월간 드라마 인사이트 전용 시트 로더 =====
 @st.cache_data(ttl=300, show_spinner=False)
 def load_monthly_df() -> pd.DataFrame:
-    """
-    엑셀 포맷으로 export하여 '월간 드라마인사이트' 시트만 구체적으로 로드합니다.
-    (openpyxl 패키지가 필요합니다.)
-    """
     if not ARCHIVE_SHEET_URL:
         return pd.DataFrame()
     m = re.search(r"/spreadsheets/d/([^/]+)/", ARCHIVE_SHEET_URL)
@@ -338,21 +330,16 @@ def load_monthly_df() -> pd.DataFrame:
     xlsx_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
     
     try:
-        # 특정 시트명 명시 (시트 이름이 다를 경우 이 부분을 수정하세요)
         df = pd.read_excel(xlsx_url, sheet_name="월간 드라마인사이트")
-        
-        # A, B, C열만 추출하여 명시적으로 컬럼명 할당
         df = df.iloc[:, :3]
         df.columns = ["title", "date", "url"]
         
-        # 빈 데이터 제거 및 문자열 치환
         df = df.dropna(subset=["title", "url"])
         for c in ["title", "date", "url"]:
             df[c] = df[c].astype(str).fillna("").str.strip().replace("nan", "")
             
         df = df[df["title"] != ""].copy()
         df.reset_index(drop=True, inplace=True)
-        # 상세 뷰를 위한 고유 ID 부여
         df["row_id"] = "monthly_" + df.index.astype(str)
         return df
     except Exception as e:
@@ -364,7 +351,6 @@ def load_monthly_df() -> pd.DataFrame:
 # Google API – Slides / Drive 인증 및 썸네일
 # ─────────────────────────────────────────────────────────────
 SLIDES_SCOPES = ["https://www.googleapis.com/auth/presentations.readonly"]
-# ===== 추가: Drive API 권한 (PDF 썸네일용) =====
 DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 @st.cache_resource(show_spinner=False)
@@ -386,7 +372,6 @@ def get_slides_service():
     if not creds: return None
     return build("slides", "v1", credentials=creds, cache_discovery=False)
 
-# ===== 추가: Drive API 서비스 초기화 =====
 @st.cache_resource(show_spinner=False)
 def get_drive_service():
     creds = get_google_credentials(DRIVE_SCOPES)
@@ -418,12 +403,8 @@ def get_slide_thumbnail_url(presentation_id: str, page_object_id: str) -> Option
     except Exception as e:
         return None
 
-# ===== 추가: Drive에서 PDF 파일 1페이지 썸네일 가져오기 =====
 @st.cache_data(ttl=600, show_spinner=False)
 def get_drive_thumbnail_url(file_id: str) -> Optional[str]:
-    """
-    Google Drive API를 통해 PDF의 thumbnailLink를 반환합니다.
-    """
     service = get_drive_service()
     if service is None: return None
     try:
@@ -453,13 +434,10 @@ def extract_presentation_id(url: str) -> Optional[str]:
     m = re.search(r"/d/([^/]+)/", url)
     return m.group(1) if m else None
 
-# ===== 추가: 드라이브 일반 파일(PDF) ID 추출기 =====
 def extract_drive_file_id(url: str) -> Optional[str]:
     if not url: return None
-    # /file/d/ID/view 패턴
     m = re.search(r"/file/d/([^/]+)", url)
     if m: return m.group(1)
-    # ?id=ID 패턴
     m = re.search(r"id=([^&]+)", url)
     if m: return m.group(1)
     return None
@@ -519,7 +497,6 @@ def render_home():
         """, unsafe_allow_html=True
     )
 
-# ===== 수정: 월간 리포트 리스트 (PDF 썸네일 그리드) =====
 def render_monthly_list(df_monthly: pd.DataFrame):
     st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">월간 드라마 인사이트 리포트</div>', unsafe_allow_html=True)
@@ -529,7 +506,6 @@ def render_monthly_list(df_monthly: pd.DataFrame):
         st.info("등록된 월간 리포트가 없습니다. 시트를 확인해 주세요.")
         return
 
-    # 카드 그리드 시작
     cols_html = ['<div class="monthly-grid">']
     
     for _, row in df_monthly.iterrows():
@@ -540,29 +516,26 @@ def render_monthly_list(df_monthly: pd.DataFrame):
         file_id = extract_drive_file_id(url)
         thumb_url = ""
         
-        # Drive API 썸네일 호출 (없으면 플레이스홀더)
         if file_id:
-            thumb_url = get_drive_thumbnail_url(file_id) or "https://via.placeholder.com/400x560?text=No+Thumbnail"
+            thumb_url = get_drive_thumbnail_url(file_id) or "https://via.placeholder.com/640x360?text=No+Thumbnail"
         else:
-            thumb_url = "https://via.placeholder.com/400x560?text=Invalid+Link"
+            thumb_url = "https://via.placeholder.com/640x360?text=Invalid+Link"
 
         link = f"?view=monthly_detail&id={row['row_id']}"
         
-        card_html = f"""
-        <a href="{link}" target="_self" class="monthly-card">
-            <img src="{thumb_url}" class="monthly-thumb" alt="{title}">
-            <div class="monthly-info">
-                <div class="monthly-title">{title}</div>
-                <div class="monthly-date">발행시점 : {date}</div>
-            </div>
-        </a>
-        """
+        # 2. 마크다운 코드 블록 인식 방지 (들여쓰기 제거)
+        card_html = f"""<a href="{link}" target="_self" class="monthly-card">
+<img src="{thumb_url}" class="monthly-thumb" alt="{title}">
+<div class="monthly-info">
+<div class="monthly-title">{title}</div>
+<div class="monthly-date">발행시점 : {date}</div>
+</div>
+</a>"""
         cols_html.append(card_html)
         
     cols_html.append("</div>")
     st.markdown("".join(cols_html), unsafe_allow_html=True)
 
-# ===== 추가: 월간 리포트 상세 (PDF 뷰어) =====
 def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     row = df_monthly[df_monthly["row_id"] == row_id]
     if row.empty:
@@ -579,15 +552,16 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     st.markdown(f'<div class="detail-title">{title}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="detail-subtitle">발행시점 : {date}</div>', unsafe_allow_html=True)
 
-    # PDF 링크를 /preview 형식으로 변환하여 iframe 출력
     embed_url = build_embed_url_if_possible(url)
     if embed_url:
-        st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
-        st_iframe(embed_url, height=900, scrolling=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        # 3. HTML iframe 직접 삽입 (화면 꽉 채우기)
+        st.markdown(f"""
+        <div class="embed-frame" style="height: 85vh;">
+            <iframe src="{embed_url}" width="100%" height="100%" style="border:none;" allowfullscreen="true"></iframe>
+        </div>
+        """, unsafe_allow_html=True)
     else:
         st.warning("PDF를 불러올 수 없습니다. 올바른 구글 드라이브 링크인지 확인해 주세요.")
-
 
 def render_slide_range_as_thumbnails(target_url: str, page_range: str):
     pres_id = extract_presentation_id(target_url)
@@ -596,9 +570,11 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
         if not embed_url:
             st.warning("연결된 프레젠테이션 링크가 없습니다.")
             return
-        st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
-        st_iframe(embed_url, height=800, scrolling=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="embed-frame" style="height: 85vh;">
+            <iframe src="{embed_url}" width="100%" height="100%" style="border:none;" allowfullscreen="true"></iframe>
+        </div>
+        """, unsafe_allow_html=True)
         return
 
     pages = parse_page_range(page_range)
@@ -607,9 +583,11 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
         if not embed_url:
             st.warning("페이지 범위가 설정되지 않았고, 프레젠테이션을 불러올 수 없습니다.")
             return
-        st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
-        st_iframe(embed_url, height=800, scrolling=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="embed-frame" style="height: 85vh;">
+            <iframe src="{embed_url}" width="100%" height="100%" style="border:none;" allowfullscreen="true"></iframe>
+        </div>
+        """, unsafe_allow_html=True)
         return
 
     page_ids = get_presentation_page_ids(pres_id)
@@ -635,9 +613,11 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
 
         embed_url = build_embed_url_if_possible(target_url, page_range)
         if embed_url:
-            st.markdown('<div class="embed-frame">', unsafe_allow_html=True)
-            st_iframe(embed_url, height=800, scrolling=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="embed-frame" style="height: 85vh;">
+                <iframe src="{embed_url}" width="100%" height="100%" style="border:none;" allowfullscreen="true"></iframe>
+            </div>
+            """, unsafe_allow_html=True)
         else:
             st.warning("해당 페이지 범위를 렌더링할 수 없습니다.")
 
@@ -814,7 +794,6 @@ def main():
         render_home()
         return
 
-    # ===== 수정: 라우팅 로직(월간 상세 뷰 추가) =====
     if VIEW == "monthly":
         df_monthly = load_monthly_df()
         render_monthly_list(df_monthly)
@@ -822,7 +801,6 @@ def main():
         df_monthly = load_monthly_df()
         render_monthly_detail(df_monthly, ROW_ID)
     else:
-        # 배우/장르 아카이브 데이터 로딩 (월간이 아닐 때만 로딩)
         df = load_archive_df()
         if df.empty:
             st.error("아카이브 데이터를 불러오지 못했습니다. ARCHIVE_SHEET_URL 설정을 확인하세요.")
