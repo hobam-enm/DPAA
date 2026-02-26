@@ -838,7 +838,7 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
 def render_actor_genre_list(df: pd.DataFrame):
     st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
-    st.markdown('<div class="detail-title">캐스킹 / 장르 분석 리포트</div>', unsafe_allow_html=True)
+    st.markdown('<div class="detail-title">캐스팅 / 장르 분석 리포트</div>', unsafe_allow_html=True)
 
     # ===== 데이터에서 존재하는 모든 배우명과 장르 키워드 추출 =====
     actor_list = df[df["actor_range"] != ""]["cast_clean"].str.split(r",\s*").explode().str.strip().dropna().unique().tolist()
