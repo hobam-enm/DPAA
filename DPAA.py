@@ -3,7 +3,7 @@ import re
 import io
 import base64
 from typing import List, Optional
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 
 import pandas as pd
 import streamlit as st
@@ -380,6 +380,33 @@ ROW_ID = params.get("id", None)
 
 ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
 
+
+def make_app_link(**kwargs) -> str:
+    cleaned = {}
+    for k, v in kwargs.items():
+        if v is None:
+            continue
+        sv = str(v).strip()
+        if sv == "":
+            continue
+        cleaned[k] = sv
+    if not cleaned:
+        return "?"
+    return "?" + "&".join(f"{quote(str(k))}={quote(str(v))}" for k, v in cleaned.items())
+
+
+def render_share_link(link: str, label: str = "이 페이지 바로가기"):
+    full_link = link
+    st.markdown(
+        f"""
+        <div class="viewer-wrapper" style="margin-top:8px; margin-bottom:12px;">
+            <div style="font-size:13px; color:#666; margin-bottom:6px;">🔗 {label}</div>
+            <div style="padding:10px 14px; border:1px solid #eaeaea; border-radius:10px; background:#fafafa; font-size:13px; word-break:break-all;">{full_link}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 # 홈 카드 배경 이미지(Secrets)
 HOME_IMG1 = st.secrets.get("img1", "")
 HOME_IMG2 = st.secrets.get("img2", "")
@@ -618,8 +645,8 @@ def render_home():
     img1 = HOME_IMG1
     img2 = HOME_IMG2
 
-    monthly_link = "?view=monthly"
-    actor_link = "?view=actor_genre"
+    monthly_link = make_app_link(view="monthly")
+    actor_link = make_app_link(view="actor_genre")
 
     st.markdown(
         f"""
@@ -644,9 +671,10 @@ def render_home():
     )
 
 def render_monthly_list(df_monthly: pd.DataFrame):
-    st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="{make_app_link(view="home")}" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">월간 드라마 인사이트 리포트</div>', unsafe_allow_html=True)
     st.markdown('<div class="detail-subtitle">드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.</div>', unsafe_allow_html=True)
+    render_share_link(make_app_link(view="monthly"), "월간 리포트 메인 페이지 링크")
 
     if df_monthly.empty:
         st.info("등록된 월간 리포트가 없습니다. 시트를 확인해 주세요.")
@@ -667,7 +695,7 @@ def render_monthly_list(df_monthly: pd.DataFrame):
         else:
             thumb_url = "https://via.placeholder.com/640x360?text=Invalid+Link"
 
-        link = f"?view=monthly_detail&id={row['row_id']}"
+        link = make_app_link(view="monthly_detail", id=row["row_id"])
         
         card_html = f'<a href="{link}" target="_self" class="monthly-card"><div class="monthly-thumb-box"><img src="{thumb_url}" class="monthly-thumb" alt="{title}"></div><div class="monthly-info"><div class="monthly-title">{title}</div><div class="monthly-date">발행시점 : {date}</div></div></a>'
         cols_html.append(card_html)
@@ -688,13 +716,15 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     url = row["url"]
 
     # 헤더 텍스트가 왼쪽으로 치우치지 않게 뷰어와 동일한 컨테이너(viewer-wrapper)로 묶음
+    detail_link = make_app_link(view="monthly_detail", id=row_id)
     st.markdown(f'''
     <div class="viewer-wrapper">
-        <a href="?view=monthly" target="_self" class="detail-back">← 월간 리포트 목록으로</a>
+        <a href="{make_app_link(view="monthly")}" target="_self" class="detail-back">← 월간 리포트 목록으로</a>
         <div class="detail-title">{title}</div>
         <div class="detail-subtitle">발행시점 : {date}</div>
     </div>
     ''', unsafe_allow_html=True)
+    render_share_link(detail_link, "이 월간 리포트 바로가기 링크")
 
     file_id = extract_drive_file_id(url)
     rendered_native = False
@@ -828,13 +858,15 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
     cast_text = cast if cast else "배우 정보 없음"
     title_display = f"{cast_text} ({ip})"
 
+    detail_link = make_app_link(view="actor_detail", id=row_id)
     st.markdown(f'''
     <div class="viewer-wrapper">
-        <a href="?view=actor_genre" target="_self" class="detail-back">← 캐스팅/장르 분석 목록으로</a>
+        <a href="{make_app_link(view="actor_genre")}" target="_self" class="detail-back">← 캐스팅/장르 분석 목록으로</a>
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">캐스팅 분석 리포트<br>{meta}</div>
     </div>
     ''', unsafe_allow_html=True)
+    render_share_link(detail_link, "이 캐스팅 분석 리포트 바로가기 링크")
 
     target_url = row.get("actor_url") or row.get("url")
     page_range = row.get("actor_range", "")
@@ -860,13 +892,15 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
     title_display = f"{title} ({ip})"
 
+    detail_link = make_app_link(view="genre_detail", id=row_id)
     st.markdown(f'''
     <div class="viewer-wrapper">
-        <a href="?view=actor_genre" target="_self" class="detail-back">← 캐스팅/장르 분석 목록으로</a>
+        <a href="{make_app_link(view="actor_genre")}" target="_self" class="detail-back">← 캐스팅/장르 분석 목록으로</a>
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>
     </div>
     ''', unsafe_allow_html=True)
+    render_share_link(detail_link, "이 장르 분석 리포트 바로가기 링크")
 
     target_url = row.get("genre_url") or row.get("url")
     page_range = row.get("genre_range", "")
@@ -876,8 +910,9 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
 # ===== 캐스팅 / 장르 분석 리스트 렌더링 =====
 def render_actor_genre_list(df: pd.DataFrame):
-    st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="{make_app_link(view="home")}" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">캐스팅 / 장르 분석 리포트</div>', unsafe_allow_html=True)
+    render_share_link(make_app_link(view="actor_genre"), "캐스팅 / 장르 분석 메인 페이지 링크")
 
     # ===== 데이터에서 존재하는 모든 배우명과 장르 키워드 추출 및 정렬 =====
     actor_list = df[df["actor_range"] != ""]["cast_clean"].str.split(r",\s*").explode().str.strip().dropna().unique().tolist()
@@ -933,7 +968,7 @@ def render_actor_genre_list(df: pd.DataFrame):
                 actor_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 캐스팅 분석 페이지가 없습니다.</div>')
             else:
                 for _, row in actor_df.iterrows():
-                    link = f"?view=actor_detail&id={row['row_id']}"
+                    link = make_app_link(view="actor_detail", id=row["row_id"])
                     ip = row["ip"]
                     cast = row["cast_clean"] or row["cast"]
                     date = row["date"]
@@ -979,7 +1014,7 @@ def render_actor_genre_list(df: pd.DataFrame):
                 genre_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 장르 분석 페이지가 없습니다.</div>')
             else:
                 for _, row in genre_df.iterrows():
-                    link = f"?view=genre_detail&id={row['row_id']}"
+                    link = make_app_link(view="genre_detail", id=row["row_id"])
                     ip = row["ip"]
                     title = row["genre_title"] or "장르 분석"
                     date = row["date"]
