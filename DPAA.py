@@ -398,20 +398,27 @@ def make_app_link(**kwargs) -> str:
 
 
 def sync_browser_url(**kwargs):
-    target = make_app_link(**kwargs)
-    safe_target = json.dumps(target)
-    st_html(
-        f"""
-        <script>
-        const target = {safe_target};
-        const current = window.parent.location.search || '?';
-        if (current !== target) {{
-            window.parent.history.replaceState({{}}, '', target);
-        }}
-        </script>
-        """,
-        height=0,
-    )
+    cleaned = {}
+    for k, v in kwargs.items():
+        if v is None:
+            continue
+        sv = str(v).strip()
+        if sv == "":
+            continue
+        cleaned[k] = sv
+
+    current = {}
+    for key in list(st.query_params.keys()):
+        val = st.query_params.get(key)
+        if isinstance(val, list):
+            current[key] = val[0] if val else ""
+        else:
+            current[key] = val
+
+    if current != cleaned:
+        st.query_params.clear()
+        for key, value in cleaned.items():
+            st.query_params[key] = value
 
 # 홈 카드 배경 이미지(Secrets)
 HOME_IMG1 = st.secrets.get("img1", "")
