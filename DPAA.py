@@ -193,6 +193,18 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     box-shadow: 0 12px 30px rgba(0,0,0,0.08);
     border-color: #ff7a50;
 }
+.link-form { margin: 0; }
+.link-button-reset {
+    appearance: none;
+    -webkit-appearance: none;
+    background: none;
+    border: none;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    text-align: inherit;
+    cursor: pointer;
+}
 
 /* 썸네일 강제 확대 1.10 유지 */
 .monthly-thumb-box {
@@ -665,27 +677,33 @@ def render_home():
     st.markdown(
         f"""
         <div class="home-grid">
-          <a href="{monthly_link}" target="_self" class="home-card card-monthly" style="--bg:url('{img1}')">
-            <div class="home-card-tag">MONTHLY</div>
-            <div class="home-card-title">월간 드라마 인사이트 리포트</div>
-            <div class="home-card-desc">
-              드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, <br>
-              IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.
-            </div>
-          </a>
-          <a href="{actor_link}" target="_self" class="home-card card-actor" style="--bg:url('{img2}')">
-            <div class="home-card-tag">CAST / GENRE</div>
-            <div class="home-card-title">캐스팅 / 장르 분석 리포트</div>
-            <div class="home-card-desc">
-              마케팅 관점의 배우-캐스팅분석 및 장르분석 리포트입니다.
-            </div>
-          </a>
+          <form class="link-form" action="" method="get">
+            <input type="hidden" name="view" value="monthly">
+            <button type="submit" class="link-button-reset home-card card-monthly" style="--bg:url('{img1}')">
+              <div class="home-card-tag">MONTHLY</div>
+              <div class="home-card-title">월간 드라마 인사이트 리포트</div>
+              <div class="home-card-desc">
+                드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, <br>
+                IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.
+              </div>
+            </button>
+          </form>
+          <form class="link-form" action="" method="get">
+            <input type="hidden" name="view" value="actor_genre">
+            <button type="submit" class="link-button-reset home-card card-actor" style="--bg:url('{img2}')">
+              <div class="home-card-tag">CAST / GENRE</div>
+              <div class="home-card-title">캐스팅 / 장르 분석 리포트</div>
+              <div class="home-card-desc">
+                마케팅 관점의 배우-캐스팅분석 및 장르분석 리포트입니다.
+              </div>
+            </button>
+          </form>
         </div>
         """, unsafe_allow_html=True
     )
 
 def render_monthly_list(df_monthly: pd.DataFrame):
-    st.markdown(f'<a href="{make_app_link(view="home")}" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
+    st.markdown('<form class="link-form" action="" method="get"><input type="hidden" name="view" value="home"><button type="submit" class="link-button-reset detail-back">← 메인으로 돌아가기</button></form>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">월간 드라마 인사이트 리포트</div>', unsafe_allow_html=True)
     st.markdown('<div class="detail-subtitle">드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.</div>', unsafe_allow_html=True)
     sync_browser_url(view="monthly")
@@ -709,9 +727,7 @@ def render_monthly_list(df_monthly: pd.DataFrame):
         else:
             thumb_url = "https://via.placeholder.com/640x360?text=Invalid+Link"
 
-        link = make_app_link(view="monthly_detail", id=row["row_id"])
-        
-        card_html = f'<a href="{link}" target="_self" class="monthly-card"><div class="monthly-thumb-box"><img src="{thumb_url}" class="monthly-thumb" alt="{title}"></div><div class="monthly-info"><div class="monthly-title">{title}</div><div class="monthly-date">발행시점 : {date}</div></div></a>'
+        card_html = f'''<form class="link-form" action="" method="get"><input type="hidden" name="view" value="monthly_detail"><input type="hidden" name="id" value="{row["row_id"]}"><button type="submit" class="link-button-reset monthly-card"><div class="monthly-thumb-box"><img src="{thumb_url}" class="monthly-thumb" alt="{title}"></div><div class="monthly-info"><div class="monthly-title">{title}</div><div class="monthly-date">발행시점 : {date}</div></div></button></form>'''
         cols_html.append(card_html)
         
     cols_html.append("</div>")
@@ -733,7 +749,7 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     detail_link = make_app_link(view="monthly_detail", id=row_id)
     st.markdown(f'''
     <div class="viewer-wrapper">
-        <a href="{make_app_link(view="monthly")}" target="_self" class="detail-back">← 월간 리포트 목록으로</a>
+        <form class="link-form" action="" method="get"><input type="hidden" name="view" value="monthly"><button type="submit" class="link-button-reset detail-back">← 월간 리포트 목록으로</button></form>
         <div class="detail-title">{title}</div>
         <div class="detail-subtitle">발행시점 : {date}</div>
     </div>
@@ -875,7 +891,7 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
     detail_link = make_app_link(view="actor_detail", id=row_id)
     st.markdown(f'''
     <div class="viewer-wrapper">
-        <a href="{make_app_link(view="actor_genre")}" target="_self" class="detail-back">← 캐스팅/장르 분석 목록으로</a>
+        <form class="link-form" action="" method="get"><input type="hidden" name="view" value="actor_genre"><button type="submit" class="link-button-reset detail-back">← 캐스팅/장르 분석 목록으로</button></form>
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">캐스팅 분석 리포트<br>{meta}</div>
     </div>
@@ -909,7 +925,7 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
     detail_link = make_app_link(view="genre_detail", id=row_id)
     st.markdown(f'''
     <div class="viewer-wrapper">
-        <a href="{make_app_link(view="actor_genre")}" target="_self" class="detail-back">← 캐스팅/장르 분석 목록으로</a>
+        <form class="link-form" action="" method="get"><input type="hidden" name="view" value="actor_genre"><button type="submit" class="link-button-reset detail-back">← 캐스팅/장르 분석 목록으로</button></form>
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>
     </div>
@@ -924,7 +940,7 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
 # ===== 캐스팅 / 장르 분석 리스트 렌더링 =====
 def render_actor_genre_list(df: pd.DataFrame):
-    st.markdown(f'<a href="{make_app_link(view="home")}" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
+    st.markdown('<form class="link-form" action="" method="get"><input type="hidden" name="view" value="home"><button type="submit" class="link-button-reset detail-back">← 메인으로 돌아가기</button></form>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">캐스팅 / 장르 분석 리포트</div>', unsafe_allow_html=True)
     sync_browser_url(view="actor_genre")
 
@@ -982,7 +998,6 @@ def render_actor_genre_list(df: pd.DataFrame):
                 actor_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 캐스팅 분석 페이지가 없습니다.</div>')
             else:
                 for _, row in actor_df.iterrows():
-                    link = make_app_link(view="actor_detail", id=row["row_id"])
                     ip = row["ip"]
                     cast = row["cast_clean"] or row["cast"]
                     date = row["date"]
@@ -994,13 +1009,15 @@ def render_actor_genre_list(df: pd.DataFrame):
                     cast_text = cast if cast else "배우 정보 없음"
                     title_display = f"{cast_text} ({ip})"
 
-                    # 들여쓰기로 인한 코드블록 인식 오류를 막기 위해 한 줄 문자열 연결 방식 사용
                     actor_html.append(
-                        f'<a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">'
+                        f'<form class="link-form" action="" method="get">'
+                        f'<input type="hidden" name="view" value="actor_detail">'
+                        f'<input type="hidden" name="id" value="{row["row_id"]}">'
+                        f'<button type="submit" class="link-button-reset analysis-card" style="margin-bottom: 12px;">'
                         f'<div class="analysis-title-row"><div class="analysis-ip">{title_display}</div>'
                         f'<div class="analysis-label">캐스팅 분석</div></div>'
                         f'<div class="analysis-meta">{meta}</div>'
-                        f'<div class="analysis-sub">작품: {ip}</div></a>'
+                        f'<div class="analysis-sub">작품: {ip}</div></button></form>'
                     )
             actor_html.append('</div>')
             st.markdown("".join(actor_html), unsafe_allow_html=True)
@@ -1026,9 +1043,7 @@ def render_actor_genre_list(df: pd.DataFrame):
 
             if genre_df.empty:
                 genre_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 장르 분석 페이지가 없습니다.</div>')
-            else:
                 for _, row in genre_df.iterrows():
-                    link = make_app_link(view="genre_detail", id=row["row_id"])
                     ip = row["ip"]
                     title = row["genre_title"] or "장르 분석"
                     date = row["date"]
@@ -1039,13 +1054,15 @@ def render_actor_genre_list(df: pd.DataFrame):
                     meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
                     title_display = f"{title} ({ip})"
 
-                    # 들여쓰기로 인한 코드블록 인식 오류를 막기 위해 한 줄 문자열 연결 방식 사용
                     genre_html.append(
-                        f'<a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">'
+                        f'<form class="link-form" action="" method="get">'
+                        f'<input type="hidden" name="view" value="genre_detail">'
+                        f'<input type="hidden" name="id" value="{row["row_id"]}">'
+                        f'<button type="submit" class="link-button-reset analysis-card" style="margin-bottom: 12px;">'
                         f'<div class="analysis-title-row"><div class="analysis-ip">{title_display}</div>'
                         f'<div class="analysis-label">장르 분석</div></div>'
                         f'<div class="analysis-meta">{meta}</div>'
-                        f'<div class="analysis-sub">작품: {ip}</div></a>'
+                        f'<div class="analysis-sub">작품: {ip}</div></button></form>'
                     )
             genre_html.append('</div>')
             st.markdown("".join(genre_html), unsafe_allow_html=True)
