@@ -3,11 +3,11 @@ import re
 import io
 import base64
 from typing import List, Optional
-from urllib.parse import urlparse, parse_qs, quote
+from urllib.parse import urlparse, parse_qs
 
 import pandas as pd
 import streamlit as st
-from streamlit.components.v1 import iframe as st_iframe
+from streamlit.components.v1 import iframe as st_iframe, html as st_html
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -374,15 +374,6 @@ st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 # ─────────────────────────────────────────────────────────────
 # 쿼리 파라미터
 # ─────────────────────────────────────────────────────────────
-def make_stable_key(*parts: str) -> str:
-    tokens = []
-    for part in parts:
-        val = str(part or "").strip()
-        if val:
-            tokens.append(val)
-    raw = " | ".join(tokens)
-    return quote(raw, safe="")
-
 params = st.query_params
 VIEW = params.get("view", "home")
 ROW_ID = params.get("id", None)
@@ -392,7 +383,74 @@ ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
 # 홈 카드 배경 이미지(Secrets)
 HOME_IMG1 = st.secrets.get("img1", "")
 HOME_IMG2 = st.secrets.get("img2", "")
-BASE_APP_URL = "https://dmkt-insight.streamlit.app/"
+
+
+APP_BASE_URL = "https://dmkt-insight.streamlit.app"
+
+
+def normalize_text_for_key(value: str) -> str:
+    value = str(value or "").strip().lower()
+    value = re.sub(r"\s+", " ", value)
+    return value
+
+
+def make_stable_key(*parts: str) -> str:
+    normalized = "|".join(normalize_text_for_key(p) for p in parts if str(p or "").strip())
+    if not normalized:
+        return ""
+    normalized = re.sub(r"[^0-9a-zA-Z가-힣|]+", "-", normalized).strip("-")
+    normalized = re.sub(r"-{2,}", "-", normalized)
+    return normalized[:240]
+
+
+def build_share_url(view: str, item_key: Optional[str] = None) -> str:
+    if item_key:
+        return f"{APP_BASE_URL}/?view={view}&id={item_key}"
+    return f"{APP_BASE_URL}/?view={view}"
+
+
+def render_detail_action_bar(back_href: str, back_label: str, share_url: str, key_suffix: str):
+    safe_key = re.sub(r"[^0-9a-zA-Z_-]", "-", str(key_suffix))
+    safe_url = share_url.replace("\\", "\\\\").replace("'", "\\'")
+    bar_html = f"""
+    <div class="viewer-wrapper" style="margin-bottom: 8px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <a href="{back_href}" target="_self" class="detail-back" style="margin-bottom:0;">{back_label}</a>
+            <button id="share-btn-{safe_key}" style="border:1px solid #d9d9d9; background:#ffffff; color:#333333; border-radius:999px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.04);">공유하기</button>
+        </div>
+    </div>
+    <script>
+    const shareBtn = document.getElementById("share-btn-{safe_key}");
+    if (shareBtn) {{
+        shareBtn.onclick = async function () {{
+            try {{
+                await navigator.clipboard.writeText('{safe_url}');
+                const original = shareBtn.innerText;
+                shareBtn.innerText = '복사 완료';
+                setTimeout(() => {{ shareBtn.innerText = original; }}, 1500);
+            }} catch (e) {{
+                shareBtn.innerText = '복사 실패';
+                setTimeout(() => {{ shareBtn.innerText = '공유하기'; }}, 1500);
+            }}
+        }};
+    }}
+    </script>
+    """
+    st_html(bar_html, height=58)
+
+
+def get_detail_row(df: pd.DataFrame, identifier: str, stable_col: str = "stable_id") -> pd.DataFrame:
+    if identifier is None:
+        return df.iloc[0:0]
+    row = df[df["row_id"] == identifier]
+    if not row.empty:
+        return row
+    if stable_col in df.columns:
+        row = df[df[stable_col] == identifier]
+        if not row.empty:
+            return row
+    return df.iloc[0:0]
+
 
 
 # ─────────────────────────────────────────────────────────────
@@ -447,7 +505,15 @@ def load_archive_df() -> pd.DataFrame:
     )
     df = df[df["ip"] != ""].copy()
     df.reset_index(drop=True, inplace=True)
-    df["row_id"] = df.apply(lambda r: make_stable_key(r.get("ip", ""), r.get("cast_clean", "") or r.get("cast", ""), r.get("genre_title", ""), r.get("date", ""), r.get("air", "")), axis=1)
+    df["row_id"] = df.index.astype(str)
+    df["actor_stable_id"] = df.apply(
+        lambda r: make_stable_key("actor", r.get("ip", ""), r.get("cast_clean", "") or r.get("cast", ""), r.get("date", ""), r.get("air", "")),
+        axis=1,
+    )
+    df["genre_stable_id"] = df.apply(
+        lambda r: make_stable_key("genre", r.get("ip", ""), r.get("genre_title", ""), r.get("date", ""), r.get("air", "")),
+        axis=1,
+    )
     return df
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -472,7 +538,8 @@ def load_monthly_df() -> pd.DataFrame:
             
         df = df[df["title"] != ""].copy()
         df.reset_index(drop=True, inplace=True)
-        df["row_id"] = df.apply(lambda r: make_stable_key(r.get("title", ""), r.get("date", "")), axis=1)
+        df["row_id"] = "monthly_" + df.index.astype(str)
+        df["stable_id"] = df.apply(lambda r: make_stable_key("monthly", r.get("title", ""), r.get("date", "")), axis=1)
         return df
     except Exception as e:
         st.error(f"월간 드라마인사이트 시트 로딩 실패: {e}\n(openpyxl 패키지가 설치되어 있는지 확인하세요.)")
@@ -611,24 +678,6 @@ def build_embed_url_if_possible(url: str, page_range: str = "") -> str:
     return url
 
 
-
-def build_share_url(view: str, item_key: Optional[str] = None) -> str:
-    base = BASE_APP_URL.rstrip("/")
-    if item_key is None:
-        return f"{base}/?view={view}"
-    return f"{base}/?view={view}&id={item_key}"
-
-def render_detail_action_bar(back_href: str, back_label: str, share_url: str, key_suffix: str):
-    button_html = f"""
-    <div style="margin: 8px 0 18px 0;">
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <a href="{back_href}" target="_self" style="display:inline-flex; align-items:center; justify-content:center; text-decoration:none; border:1px solid #d9d9d9; background:#ffffff; color:#333333; border-radius:999px; padding:9px 16px; font-size:13px; font-weight:600; box-shadow:0 2px 8px rgba(0,0,0,0.04);">{back_label}</a>
-        <button id="share-btn-{key_suffix}" onclick="navigator.clipboard.writeText('{share_url}').then(() => {{ const btn = document.getElementById('share-btn-{key_suffix}'); const original = btn.innerText; btn.innerText = '복사 완료'; setTimeout(() => {{ btn.innerText = original; }}, 1600); }});" style="border:1px solid #d9d9d9; background:#ffffff; color:#333333; border-radius:999px; padding:9px 16px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.04);">공유하기</button>
-      </div>
-    </div>
-    """
-    st.components.v1.html(button_html, height=56)
-
 # ─────────────────────────────────────────────────────────────
 # 렌더링 – 홈 / 월간 / 배우·장르 리스트 / 상세
 # ─────────────────────────────────────────────────────────────
@@ -705,7 +754,7 @@ def render_monthly_list(df_monthly: pd.DataFrame):
 
 # ===== 수정: 상세 뷰어 가로폭 제한 래퍼(viewer-wrapper) 및 페이지 이미지 테두리 적용 =====
 def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
-    row = df_monthly[df_monthly["row_id"] == row_id]
+    row = get_detail_row(df_monthly, row_id, "stable_id")
     if row.empty:
         st.error("유효하지 않은 접근입니다.")
         return
@@ -716,13 +765,18 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     url = row["url"]
 
     # 헤더 텍스트가 왼쪽으로 치우치지 않게 뷰어와 동일한 컨테이너(viewer-wrapper)로 묶음
+    render_detail_action_bar(
+        "?view=monthly",
+        "← 월간 리포트 목록으로",
+        build_share_url("monthly_detail", row.get("stable_id") or row_id),
+        f"monthly-{row.get('stable_id') or row_id}"
+    )
     st.markdown(f'''
     <div class="viewer-wrapper">
         <div class="detail-title">{title}</div>
         <div class="detail-subtitle">발행시점 : {date}</div>
     </div>
     ''', unsafe_allow_html=True)
-    render_detail_action_bar("?view=monthly", "← 월간 리포트 목록으로", build_share_url("monthly_detail", row_id), f"monthly-{row_id}")
 
     file_id = extract_drive_file_id(url)
     rendered_native = False
@@ -838,7 +892,7 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
 
 
 def render_actor_detail(df: pd.DataFrame, row_id: str):
-    row = df[df["row_id"] == row_id]
+    row = get_detail_row(df.assign(stable_id=df.get("actor_stable_id", "")), row_id, "stable_id")
     if row.empty:
         st.error("유효하지 않은 접근입니다.")
         return
@@ -856,13 +910,18 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
     cast_text = cast if cast else "배우 정보 없음"
     title_display = f"{cast_text} ({ip})"
 
+    render_detail_action_bar(
+        "?view=actor_genre",
+        "← 캐스팅/장르 분석 목록으로",
+        build_share_url("actor_detail", row.get("actor_stable_id") or row_id),
+        f"actor-{row.get('actor_stable_id') or row_id}"
+    )
     st.markdown(f'''
     <div class="viewer-wrapper">
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">캐스팅 분석 리포트<br>{meta}</div>
     </div>
     ''', unsafe_allow_html=True)
-    render_detail_action_bar("?view=actor_genre", "← 캐스팅/장르 분석 목록으로", build_share_url("actor_detail", row_id), f"actor-{row_id}")
 
     target_url = row.get("actor_url") or row.get("url")
     page_range = row.get("actor_range", "")
@@ -871,7 +930,7 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
 
 
 def render_genre_detail(df: pd.DataFrame, row_id: str):
-    row = df[df["row_id"] == row_id]
+    row = get_detail_row(df.assign(stable_id=df.get("genre_stable_id", "")), row_id, "stable_id")
     if row.empty:
         st.error("유효하지 않은 접근입니다.")
         return
@@ -888,13 +947,18 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
     title_display = f"{title} ({ip})"
 
+    render_detail_action_bar(
+        "?view=actor_genre",
+        "← 캐스팅/장르 분석 목록으로",
+        build_share_url("genre_detail", row.get("genre_stable_id") or row_id),
+        f"genre-{row.get('genre_stable_id') or row_id}"
+    )
     st.markdown(f'''
     <div class="viewer-wrapper">
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>
     </div>
     ''', unsafe_allow_html=True)
-    render_detail_action_bar("?view=actor_genre", "← 캐스팅/장르 분석 목록으로", build_share_url("genre_detail", row_id), f"genre-{row_id}")
 
     target_url = row.get("genre_url") or row.get("url")
     page_range = row.get("genre_range", "")
