@@ -422,22 +422,22 @@ def build_share_url(view: str, item_key: str) -> str:
 def render_detail_action_bar(back_href: str, back_label: str, share_url: str, key_suffix: str):
     safe_key = re.sub(r"[^0-9a-zA-Z_-]", "-", str(key_suffix))
     back_url = f"{APP_BASE_URL}/{back_href.lstrip('/')}" if not back_href.startswith("http") else back_href
-    safe_back_url = back_url.replace("\\", "\\\\").replace("'", "\\'")
     safe_share_url = share_url.replace("\\", "\\\\").replace("'", "\\'")
+    pill_style = (
+        "display:inline-flex; align-items:center; justify-content:center; "
+        "border:1px solid #d9d9d9; background:#ffffff; color:#333333; "
+        "border-radius:999px; padding:8px 18px; min-height:40px; "
+        "font-size:13px; font-weight:600; cursor:pointer; "
+        "box-shadow:0 2px 8px rgba(0,0,0,0.04); white-space:nowrap; text-decoration:none;"
+    )
 
     action_html = f"""
     <div style="width:100%; display:flex; align-items:center; gap:12px; margin:6px 0 18px 0;">
-      <button id="back-btn-{safe_key}" style="display:inline-flex; align-items:center; justify-content:center; border:1px solid #d9d9d9; background:#ffffff; color:#333333; border-radius:999px; padding:8px 18px; min-height:40px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.04); white-space:nowrap;">{back_label}</button>
-      <button id="share-btn-{safe_key}" style="display:inline-flex; align-items:center; justify-content:center; border:1px solid #d9d9d9; background:#ffffff; color:#333333; border-radius:999px; padding:8px 18px; min-height:40px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.04); white-space:nowrap;">공유하기</button>
+      <a href="{back_url}" target="_top" style="{pill_style}">{back_label}</a>
+      <button id="share-btn-{safe_key}" type="button" style="{pill_style}">공유하기</button>
     </div>
     <script>
-    const backBtn = document.getElementById("back-btn-{safe_key}");
     const shareBtn = document.getElementById("share-btn-{safe_key}");
-    if (backBtn) {{
-      backBtn.onclick = function () {{
-        window.parent.location.href = '{safe_back_url}';
-      }};
-    }}
     if (shareBtn) {{
       shareBtn.onclick = async function () {{
         try {{
@@ -456,9 +456,6 @@ def render_detail_action_bar(back_href: str, back_label: str, share_url: str, ke
     _, center, _ = st.columns([1.15, 5.0, 1.15])
     with center:
         st.components.v1.html(action_html, height=66)
-
-
-
 # ─────────────────────────────────────────────────────────────
 # 데이터 로딩
 # ─────────────────────────────────────────────────────────────
