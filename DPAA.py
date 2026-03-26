@@ -431,9 +431,14 @@ def render_detail_action_bar(back_href: str, back_label: str, share_url: str, ke
         "box-shadow:0 2px 8px rgba(0,0,0,0.04); white-space:nowrap; text-decoration:none;"
     )
 
-    action_html = f"""
-    <div style="width:100%; display:flex; align-items:center; gap:12px; margin:6px 0 18px 0;">
-      <a href="{back_url}" target="_top" style="{pill_style}">{back_label}</a>
+    back_html = f'''
+    <div style="display:flex; align-items:center; justify-content:flex-start; margin:6px 0 18px 0;">
+      <a href="{back_url}" target="_self" style="{pill_style}">{back_label}</a>
+    </div>
+    '''
+
+    share_html = f"""
+    <div style="display:flex; align-items:center; justify-content:flex-start; margin:6px 0 18px 0;">
       <button id="share-btn-{safe_key}" type="button" style="{pill_style}">공유하기</button>
     </div>
     <script>
@@ -453,9 +458,16 @@ def render_detail_action_bar(back_href: str, back_label: str, share_url: str, ke
     }}
     </script>
     """
+
     _, center, _ = st.columns([1.15, 5.0, 1.15])
     with center:
-        st.components.v1.html(action_html, height=66)
+        c1, c2, c3 = st.columns([1.55, 1.0, 4.45])
+        with c1:
+            st.markdown(back_html, unsafe_allow_html=True)
+        with c2:
+            st.components.v1.html(share_html, height=66)
+        with c3:
+            st.empty()
 # ─────────────────────────────────────────────────────────────
 # 데이터 로딩
 # ─────────────────────────────────────────────────────────────
