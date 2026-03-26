@@ -409,16 +409,19 @@ def build_share_url(view: str, item_key: Optional[str] = None) -> str:
     return f"{APP_BASE_URL}/?view={view}"
 
 
-def render_detail_action_bar(back_href: str, back_label: str, share_url: str, key_suffix: str):
+def set_page_query(view: str, item_id: Optional[str] = None):
+    st.query_params.clear()
+    st.query_params["view"] = view
+    if item_id:
+        st.query_params["id"] = item_id
+    st.rerun()
+
+
+def render_share_button(share_url: str, key_suffix: str):
     safe_key = re.sub(r"[^0-9a-zA-Z_-]", "-", str(key_suffix))
     safe_url = share_url.replace("\\", "\\\\").replace("'", "\\'")
-    bar_html = f"""
-    <div class="viewer-wrapper" style="margin-bottom: 8px;">
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <a href="{back_href}" target="_self" class="detail-back" style="margin-bottom:0;">{back_label}</a>
-            <button id="share-btn-{safe_key}" style="border:1px solid #d9d9d9; background:#ffffff; color:#333333; border-radius:999px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.04);">공유하기</button>
-        </div>
-    </div>
+    btn_html = f"""
+    <button id="share-btn-{safe_key}" style="width:100%; border:1px solid #d9d9d9; background:#ffffff; color:#333333; border-radius:999px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.04);">공유하기</button>
     <script>
     const shareBtn = document.getElementById("share-btn-{safe_key}");
     if (shareBtn) {{
@@ -436,7 +439,17 @@ def render_detail_action_bar(back_href: str, back_label: str, share_url: str, ke
     }}
     </script>
     """
-    st_html(bar_html, height=58)
+    st_html(btn_html, height=44)
+
+
+def render_detail_action_bar(back_view: str, back_label: str, share_url: str, key_suffix: str):
+    with st.container():
+        c1, c2, c3 = st.columns([1.35, 0.9, 8])
+        with c1:
+            if st.button(back_label, key=f"back-{key_suffix}", use_container_width=True):
+                set_page_query(back_view)
+        with c2:
+            render_share_button(share_url, key_suffix)
 
 
 def get_detail_row(df: pd.DataFrame, identifier: str, stable_col: str = "stable_id") -> pd.DataFrame:
@@ -766,7 +779,7 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
 
     # 헤더 텍스트가 왼쪽으로 치우치지 않게 뷰어와 동일한 컨테이너(viewer-wrapper)로 묶음
     render_detail_action_bar(
-        "?view=monthly",
+        "monthly",
         "← 월간 리포트 목록으로",
         build_share_url("monthly_detail", row.get("stable_id") or row_id),
         f"monthly-{row.get('stable_id') or row_id}"
@@ -911,7 +924,7 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
     title_display = f"{cast_text} ({ip})"
 
     render_detail_action_bar(
-        "?view=actor_genre",
+        "actor_genre",
         "← 캐스팅/장르 분석 목록으로",
         build_share_url("actor_detail", row.get("actor_stable_id") or row_id),
         f"actor-{row.get('actor_stable_id') or row_id}"
@@ -948,7 +961,7 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
     title_display = f"{title} ({ip})"
 
     render_detail_action_bar(
-        "?view=actor_genre",
+        "actor_genre",
         "← 캐스팅/장르 분석 목록으로",
         build_share_url("genre_detail", row.get("genre_stable_id") or row_id),
         f"genre-{row.get('genre_stable_id') or row_id}"
