@@ -7,7 +7,7 @@ from urllib.parse import urlparse, parse_qs
 
 import pandas as pd
 import streamlit as st
-from streamlit.components.v1 import iframe as st_iframe, html as st_html
+from streamlit.components.v1 import iframe as st_iframe
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -285,22 +285,30 @@ a.analysis-card {
 }
 
 .detail-back {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    box-sizing: border-box;
     padding: 8px 16px;
-    margin: 10px 0 20px 0;
+    margin: 0;
     border-radius: 999px;
-    border: 1px solid #ddd;
+    border: 1px solid #d9d9d9;
     font-size: 13px;
-    font-weight: 500;
-    color: #444 !important;
+    font-weight: 600;
+    color: #333 !important;
     text-decoration: none !important;
     background: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     transition: all 0.2s;
 }
 .detail-back:hover {
     border-color: #ff7a50;
     color: #ff7a50 !important;
     background: #fff5f2;
+}
+.detail-back-pill {
+    min-height: 40px;
 }
 .detail-title {
     font-size: 30px;
@@ -387,35 +395,37 @@ HOME_IMG2 = st.secrets.get("img2", "")
 
 APP_BASE_URL = "https://dmkt-insight.streamlit.app"
 
-
-def normalize_text_for_key(value: str) -> str:
-    value = str(value or "").strip().lower()
-    value = re.sub(r"\s+", " ", value)
-    return value
-
+def _norm_text(v) -> str:
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if s.lower() == "nan":
+        return ""
+    return s
 
 def make_stable_key(*parts: str) -> str:
-    normalized = "|".join(normalize_text_for_key(p) for p in parts if str(p or "").strip())
-    if not normalized:
-        return ""
-    normalized = re.sub(r"[^0-9a-zA-Z가-힣|]+", "-", normalized).strip("-")
-    normalized = re.sub(r"-{2,}", "-", normalized)
-    return normalized[:240]
+    raw = "|".join([_norm_text(p) for p in parts if _norm_text(p)])
+    raw = raw.lower()
+    raw = re.sub(r"\s+", "-", raw)
+    raw = re.sub(r"[^0-9a-z가-힣_-]+", "-", raw)
+    raw = re.sub(r"-+", "-", raw).strip("-")
+    return raw[:220]
 
+def find_row_by_identifier(df: pd.DataFrame, identifier: str, stable_col: str = "stable_id") -> pd.DataFrame:
+    if identifier is None or df.empty:
+        return df.iloc[0:0]
+    if "row_id" in df.columns:
+        row = df[df["row_id"] == identifier]
+        if not row.empty:
+            return row
+    if stable_col in df.columns:
+        row = df[df[stable_col] == identifier]
+        if not row.empty:
+            return row
+    return df.iloc[0:0]
 
-def build_share_url(view: str, item_key: Optional[str] = None) -> str:
-    if item_key:
-        return f"{APP_BASE_URL}/?view={view}&id={item_key}"
-    return f"{APP_BASE_URL}/?view={view}"
-
-
-def set_page_query(view: str, item_id: Optional[str] = None):
-    st.query_params.clear()
-    st.query_params["view"] = view
-    if item_id:
-        st.query_params["id"] = item_id
-    st.rerun()
-
+def build_share_url(view: str, item_key: str) -> str:
+    return f"{APP_BASE_URL}/?view={view}&id={item_key}"
 
 def render_share_button(share_url: str, key_suffix: str):
     safe_key = re.sub(r"[^0-9a-zA-Z_-]", "-", str(key_suffix))
@@ -439,32 +449,19 @@ def render_share_button(share_url: str, key_suffix: str):
     }}
     </script>
     """
-    st_html(btn_html, height=44)
+    st.components.v1.html(btn_html, height=44)
 
-
-def render_detail_action_bar(back_view: str, back_label: str, share_url: str, key_suffix: str):
-    with st.container():
-        c1, c2, c3 = st.columns([1.35, 0.9, 8])
+def render_detail_action_bar(back_href: str, back_label: str, share_url: str, key_suffix: str):
+    outer_left, center, outer_right = st.columns([1.15, 5.0, 1.15])
+    with center:
+        c1, c2, c3 = st.columns([1.45, 0.9, 6.0])
         with c1:
-            if st.button(back_label, key=f"back-{key_suffix}", use_container_width=True):
-                set_page_query(back_view)
+            st.markdown(
+                f'<a href="{back_href}" target="_self" class="detail-back detail-back-pill">{back_label}</a>',
+                unsafe_allow_html=True
+            )
         with c2:
             render_share_button(share_url, key_suffix)
-
-
-def get_detail_row(df: pd.DataFrame, identifier: str, stable_col: str = "stable_id") -> pd.DataFrame:
-    if identifier is None:
-        return df.iloc[0:0]
-    row = df[df["row_id"] == identifier]
-    if not row.empty:
-        return row
-    if stable_col in df.columns:
-        row = df[df[stable_col] == identifier]
-        if not row.empty:
-            return row
-    return df.iloc[0:0]
-
-
 
 # ─────────────────────────────────────────────────────────────
 # 데이터 로딩
@@ -519,14 +516,8 @@ def load_archive_df() -> pd.DataFrame:
     df = df[df["ip"] != ""].copy()
     df.reset_index(drop=True, inplace=True)
     df["row_id"] = df.index.astype(str)
-    df["actor_stable_id"] = df.apply(
-        lambda r: make_stable_key("actor", r.get("ip", ""), r.get("cast_clean", "") or r.get("cast", ""), r.get("date", ""), r.get("air", "")),
-        axis=1,
-    )
-    df["genre_stable_id"] = df.apply(
-        lambda r: make_stable_key("genre", r.get("ip", ""), r.get("genre_title", ""), r.get("date", ""), r.get("air", "")),
-        axis=1,
-    )
+    df["actor_stable_id"] = df.apply(lambda r: make_stable_key("actor", r.get("ip", ""), r.get("cast_clean", "") or r.get("cast", ""), r.get("date", ""), r.get("air", "")), axis=1)
+    df["genre_stable_id"] = df.apply(lambda r: make_stable_key("genre", r.get("ip", ""), r.get("genre_title", ""), r.get("date", ""), r.get("air", "")), axis=1)
     return df
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -767,7 +758,7 @@ def render_monthly_list(df_monthly: pd.DataFrame):
 
 # ===== 수정: 상세 뷰어 가로폭 제한 래퍼(viewer-wrapper) 및 페이지 이미지 테두리 적용 =====
 def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
-    row = get_detail_row(df_monthly, row_id, "stable_id")
+    row = find_row_by_identifier(df_monthly, row_id, "stable_id")
     if row.empty:
         st.error("유효하지 않은 접근입니다.")
         return
@@ -777,19 +768,19 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     date = row["date"]
     url = row["url"]
 
-    # 헤더 텍스트가 왼쪽으로 치우치지 않게 뷰어와 동일한 컨테이너(viewer-wrapper)로 묶음
     render_detail_action_bar(
-        "monthly",
+        "?view=monthly",
         "← 월간 리포트 목록으로",
         build_share_url("monthly_detail", row.get("stable_id") or row_id),
         f"monthly-{row.get('stable_id') or row_id}"
     )
-    st.markdown(f'''
-    <div class="viewer-wrapper">
+
+    _, center, _ = st.columns([1.15, 5.0, 1.15])
+    with center:
+        st.markdown(f'''
         <div class="detail-title">{title}</div>
         <div class="detail-subtitle">발행시점 : {date}</div>
-    </div>
-    ''', unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
 
     file_id = extract_drive_file_id(url)
     rendered_native = False
@@ -905,7 +896,7 @@ def render_slide_range_as_thumbnails(target_url: str, page_range: str):
 
 
 def render_actor_detail(df: pd.DataFrame, row_id: str):
-    row = get_detail_row(df.assign(stable_id=df.get("actor_stable_id", "")), row_id, "stable_id")
+    row = find_row_by_identifier(df, row_id, "actor_stable_id")
     if row.empty:
         st.error("유효하지 않은 접근입니다.")
         return
@@ -924,17 +915,18 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
     title_display = f"{cast_text} ({ip})"
 
     render_detail_action_bar(
-        "actor_genre",
+        "?view=actor_genre",
         "← 캐스팅/장르 분석 목록으로",
         build_share_url("actor_detail", row.get("actor_stable_id") or row_id),
         f"actor-{row.get('actor_stable_id') or row_id}"
     )
-    st.markdown(f'''
-    <div class="viewer-wrapper">
+
+    _, center, _ = st.columns([1.15, 5.0, 1.15])
+    with center:
+        st.markdown(f'''
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">캐스팅 분석 리포트<br>{meta}</div>
-    </div>
-    ''', unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
 
     target_url = row.get("actor_url") or row.get("url")
     page_range = row.get("actor_range", "")
@@ -943,7 +935,7 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
 
 
 def render_genre_detail(df: pd.DataFrame, row_id: str):
-    row = get_detail_row(df.assign(stable_id=df.get("genre_stable_id", "")), row_id, "stable_id")
+    row = find_row_by_identifier(df, row_id, "genre_stable_id")
     if row.empty:
         st.error("유효하지 않은 접근입니다.")
         return
@@ -961,17 +953,18 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
     title_display = f"{title} ({ip})"
 
     render_detail_action_bar(
-        "actor_genre",
+        "?view=actor_genre",
         "← 캐스팅/장르 분석 목록으로",
         build_share_url("genre_detail", row.get("genre_stable_id") or row_id),
         f"genre-{row.get('genre_stable_id') or row_id}"
     )
-    st.markdown(f'''
-    <div class="viewer-wrapper">
+
+    _, center, _ = st.columns([1.15, 5.0, 1.15])
+    with center:
+        st.markdown(f'''
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>
-    </div>
-    ''', unsafe_allow_html=True)
+        ''', unsafe_allow_html=True)
 
     target_url = row.get("genre_url") or row.get("url")
     page_range = row.get("genre_range", "")
