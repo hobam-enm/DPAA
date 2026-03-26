@@ -285,30 +285,22 @@ a.analysis-card {
 }
 
 .detail-back {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    box-sizing: border-box;
+    display: inline-block;
     padding: 8px 16px;
-    margin: 0;
+    margin: 10px 0 20px 0;
     border-radius: 999px;
-    border: 1px solid #d9d9d9;
+    border: 1px solid #ddd;
     font-size: 13px;
-    font-weight: 600;
-    color: #333 !important;
+    font-weight: 500;
+    color: #444 !important;
     text-decoration: none !important;
     background: #fff;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     transition: all 0.2s;
 }
 .detail-back:hover {
     border-color: #ff7a50;
     color: #ff7a50 !important;
     background: #fff5f2;
-}
-.detail-back-pill {
-    min-height: 40px;
 }
 .detail-title {
     font-size: 30px;
@@ -411,7 +403,7 @@ def make_stable_key(*parts: str) -> str:
     raw = re.sub(r"-+", "-", raw).strip("-")
     return raw[:220]
 
-def find_row_by_identifier(df: pd.DataFrame, identifier: str, stable_col: str = "stable_id") -> pd.DataFrame:
+def find_row_by_identifier(df: pd.DataFrame, identifier: str, stable_col: str) -> pd.DataFrame:
     if identifier is None or df.empty:
         return df.iloc[0:0]
     if "row_id" in df.columns:
@@ -427,41 +419,45 @@ def find_row_by_identifier(df: pd.DataFrame, identifier: str, stable_col: str = 
 def build_share_url(view: str, item_key: str) -> str:
     return f"{APP_BASE_URL}/?view={view}&id={item_key}"
 
-def render_share_button(share_url: str, key_suffix: str):
+def render_detail_action_bar(back_href: str, back_label: str, share_url: str, key_suffix: str):
     safe_key = re.sub(r"[^0-9a-zA-Z_-]", "-", str(key_suffix))
-    safe_url = share_url.replace("\\", "\\\\").replace("'", "\\'")
-    btn_html = f"""
-    <button id="share-btn-{safe_key}" style="width:100%; border:1px solid #d9d9d9; background:#ffffff; color:#333333; border-radius:999px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.04);">공유하기</button>
+    back_url = f"{APP_BASE_URL}/{back_href.lstrip('/')}" if not back_href.startswith("http") else back_href
+    safe_back_url = back_url.replace("\\", "\\\\").replace("'", "\\'")
+    safe_share_url = share_url.replace("\\", "\\\\").replace("'", "\\'")
+
+    action_html = f"""
+    <div style="width:100%; display:flex; align-items:center; gap:12px; margin:6px 0 18px 0;">
+      <button id="back-btn-{safe_key}" style="display:inline-flex; align-items:center; justify-content:center; border:1px solid #d9d9d9; background:#ffffff; color:#333333; border-radius:999px; padding:8px 18px; min-height:40px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.04); white-space:nowrap;">{back_label}</button>
+      <button id="share-btn-{safe_key}" style="display:inline-flex; align-items:center; justify-content:center; border:1px solid #d9d9d9; background:#ffffff; color:#333333; border-radius:999px; padding:8px 18px; min-height:40px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,0.04); white-space:nowrap;">공유하기</button>
+    </div>
     <script>
+    const backBtn = document.getElementById("back-btn-{safe_key}");
     const shareBtn = document.getElementById("share-btn-{safe_key}");
+    if (backBtn) {{
+      backBtn.onclick = function () {{
+        window.parent.location.href = '{safe_back_url}';
+      }};
+    }}
     if (shareBtn) {{
-        shareBtn.onclick = async function () {{
-            try {{
-                await navigator.clipboard.writeText('{safe_url}');
-                const original = shareBtn.innerText;
-                shareBtn.innerText = '복사 완료';
-                setTimeout(() => {{ shareBtn.innerText = original; }}, 1500);
-            }} catch (e) {{
-                shareBtn.innerText = '복사 실패';
-                setTimeout(() => {{ shareBtn.innerText = '공유하기'; }}, 1500);
-            }}
-        }};
+      shareBtn.onclick = async function () {{
+        try {{
+          await window.parent.navigator.clipboard.writeText('{safe_share_url}');
+          const original = shareBtn.innerText;
+          shareBtn.innerText = '복사 완료';
+          setTimeout(() => {{ shareBtn.innerText = original; }}, 1400);
+        }} catch (e) {{
+          shareBtn.innerText = '복사 실패';
+          setTimeout(() => {{ shareBtn.innerText = '공유하기'; }}, 1400);
+        }}
+      }};
     }}
     </script>
     """
-    st.components.v1.html(btn_html, height=44)
-
-def render_detail_action_bar(back_href: str, back_label: str, share_url: str, key_suffix: str):
-    outer_left, center, outer_right = st.columns([1.15, 5.0, 1.15])
+    _, center, _ = st.columns([1.15, 5.0, 1.15])
     with center:
-        c1, c2, c3 = st.columns([1.45, 0.9, 6.0])
-        with c1:
-            st.markdown(
-                f'<a href="{back_href}" target="_self" class="detail-back detail-back-pill">{back_label}</a>',
-                unsafe_allow_html=True
-            )
-        with c2:
-            render_share_button(share_url, key_suffix)
+        st.components.v1.html(action_html, height=66)
+
+
 
 # ─────────────────────────────────────────────────────────────
 # 데이터 로딩
@@ -748,7 +744,7 @@ def render_monthly_list(df_monthly: pd.DataFrame):
         else:
             thumb_url = "https://via.placeholder.com/640x360?text=Invalid+Link"
 
-        link = f"?view=monthly_detail&id={row['row_id']}"
+        link = f"?view=monthly_detail&id={row.get('stable_id') or row['row_id']}"
         
         card_html = f'<a href="{link}" target="_self" class="monthly-card"><div class="monthly-thumb-box"><img src="{thumb_url}" class="monthly-thumb" alt="{title}"></div><div class="monthly-info"><div class="monthly-title">{title}</div><div class="monthly-date">발행시점 : {date}</div></div></a>'
         cols_html.append(card_html)
@@ -777,10 +773,10 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
 
     _, center, _ = st.columns([1.15, 5.0, 1.15])
     with center:
-        st.markdown(f'''
+        st.markdown(f"""
         <div class="detail-title">{title}</div>
         <div class="detail-subtitle">발행시점 : {date}</div>
-        ''', unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     file_id = extract_drive_file_id(url)
     rendered_native = False
@@ -792,19 +788,19 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
                 try:
                     import fitz
                     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-                    
+
                     # 뷰어 컨테이너 시작 (회색 배경, 넉넉한 여백)
                     img_htmls = ['<div class="viewer-wrapper"><div style="background:#f9f9f9; padding:40px; border-radius:16px; border:1px solid #eaeaea; box-shadow:0 10px 30px rgba(0,0,0,0.03);">']
-                    
+
                     for page_num in range(len(doc)):
                         page = doc.load_page(page_num)
                         mat = fitz.Matrix(2.0, 2.0)
                         pix = page.get_pixmap(matrix=mat, alpha=False)
-                        
+
                         # st.image 대신 HTML 태그를 사용해 완벽한 CSS(테두리, 여백 등) 제어 적용
                         b64_img = base64.b64encode(pix.tobytes("png")).decode("utf-8")
                         img_htmls.append(f'<img src="data:image/png;base64,{b64_img}" class="pdf-page-img">')
-                    
+
                     img_htmls.append('</div></div>')
                     st.markdown("".join(img_htmls), unsafe_allow_html=True)
                     rendered_native = True
@@ -923,16 +919,15 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
 
     _, center, _ = st.columns([1.15, 5.0, 1.15])
     with center:
-        st.markdown(f'''
+        st.markdown(f"""
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">캐스팅 분석 리포트<br>{meta}</div>
-        ''', unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     target_url = row.get("actor_url") or row.get("url")
     page_range = row.get("actor_range", "")
 
     render_slide_range_as_thumbnails(target_url, page_range)
-
 
 def render_genre_detail(df: pd.DataFrame, row_id: str):
     row = find_row_by_identifier(df, row_id, "genre_stable_id")
@@ -961,16 +956,15 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
     _, center, _ = st.columns([1.15, 5.0, 1.15])
     with center:
-        st.markdown(f'''
+        st.markdown(f"""
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>
-        ''', unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     target_url = row.get("genre_url") or row.get("url")
     page_range = row.get("genre_range", "")
 
     render_slide_range_as_thumbnails(target_url, page_range)
-
 
 # ===== 캐스팅 / 장르 분석 리스트 렌더링 =====
 def render_actor_genre_list(df: pd.DataFrame):
@@ -1031,7 +1025,7 @@ def render_actor_genre_list(df: pd.DataFrame):
                 actor_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 캐스팅 분석 페이지가 없습니다.</div>')
             else:
                 for _, row in actor_df.iterrows():
-                    link = f"?view=actor_detail&id={row['row_id']}"
+                    link = f"?view=actor_detail&id={row.get('actor_stable_id') or row['row_id']}"
                     ip = row["ip"]
                     cast = row["cast_clean"] or row["cast"]
                     date = row["date"]
@@ -1077,7 +1071,7 @@ def render_actor_genre_list(df: pd.DataFrame):
                 genre_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 장르 분석 페이지가 없습니다.</div>')
             else:
                 for _, row in genre_df.iterrows():
-                    link = f"?view=genre_detail&id={row['row_id']}"
+                    link = f"?view=genre_detail&id={row.get('genre_stable_id') or row['row_id']}"
                     ip = row["ip"]
                     title = row["genre_title"] or "장르 분석"
                     date = row["date"]
