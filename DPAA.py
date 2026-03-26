@@ -383,6 +383,7 @@ ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
 # 홈 카드 배경 이미지(Secrets)
 HOME_IMG1 = st.secrets.get("img1", "")
 HOME_IMG2 = st.secrets.get("img2", "")
+BASE_APP_URL = "https://dmkt-insight.streamlit.app/"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -601,6 +602,39 @@ def build_embed_url_if_possible(url: str, page_range: str = "") -> str:
     return url
 
 
+
+def build_share_url(view: str, row_id: Optional[str] = None) -> str:
+    base = BASE_APP_URL.rstrip("/")
+    if row_id is None:
+        return f"{base}/?view={view}"
+    return f"{base}/?view={view}&id={row_id}"
+
+def render_share_button(share_url: str, key_suffix: str):
+    button_html = f"""
+    <div style="margin: 6px 0 24px 0;">
+      <button id="share-btn-{key_suffix}" onclick="navigator.clipboard.writeText('{share_url}').then(() => {{
+            const btn = document.getElementById('share-btn-{key_suffix}');
+            const original = btn.innerText;
+            btn.innerText = '복사 완료';
+            setTimeout(() => {{ btn.innerText = original; }}, 1600);
+        }});" 
+        style="
+            border: 1px solid #d9d9d9;
+            background: #ffffff;
+            color: #333333;
+            border-radius: 999px;
+            padding: 9px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        ">
+        공유하기
+      </button>
+    </div>
+    """
+    st.components.v1.html(button_html, height=52)
+
 # ─────────────────────────────────────────────────────────────
 # 렌더링 – 홈 / 월간 / 배우·장르 리스트 / 상세
 # ─────────────────────────────────────────────────────────────
@@ -695,6 +729,7 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
         <div class="detail-subtitle">발행시점 : {date}</div>
     </div>
     ''', unsafe_allow_html=True)
+    render_share_button(build_share_url("monthly_detail", row_id), f"monthly-{row_id}")
 
     file_id = extract_drive_file_id(url)
     rendered_native = False
@@ -835,6 +870,7 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
         <div class="detail-subtitle">캐스팅 분석 리포트<br>{meta}</div>
     </div>
     ''', unsafe_allow_html=True)
+    render_share_button(build_share_url("actor_detail", row_id), f"actor-{row_id}")
 
     target_url = row.get("actor_url") or row.get("url")
     page_range = row.get("actor_range", "")
@@ -867,6 +903,7 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
         <div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>
     </div>
     ''', unsafe_allow_html=True)
+    render_share_button(build_share_url("genre_detail", row_id), f"genre-{row_id}")
 
     target_url = row.get("genre_url") or row.get("url")
     page_range = row.get("genre_range", "")
