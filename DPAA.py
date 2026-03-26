@@ -3,11 +3,11 @@ import re
 import io
 import base64
 from typing import List, Optional
-from urllib.parse import urlparse, parse_qs, quote
+from urllib.parse import urlparse, parse_qs
 
 import pandas as pd
 import streamlit as st
-from streamlit.components.v1 import iframe as st_iframe, html as st_html
+from streamlit.components.v1 import iframe as st_iframe
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -192,18 +192,6 @@ a.monthly-card, a.monthly-card:hover, a.monthly-card:visited {
     transform: translateY(-4px);
     box-shadow: 0 12px 30px rgba(0,0,0,0.08);
     border-color: #ff7a50;
-}
-.link-form { margin: 0; }
-.link-button-reset {
-    appearance: none;
-    -webkit-appearance: none;
-    background: none;
-    border: none;
-    width: 100%;
-    padding: 0;
-    margin: 0;
-    text-align: inherit;
-    cursor: pointer;
 }
 
 /* 썸네일 강제 확대 1.10 유지 */
@@ -391,46 +379,6 @@ VIEW = params.get("view", "home")
 ROW_ID = params.get("id", None)
 
 ARCHIVE_SHEET_URL = st.secrets.get("ARCHIVE_SHEET_URL", "")
-
-
-def make_app_link(**kwargs) -> str:
-    cleaned = {}
-    for k, v in kwargs.items():
-        if v is None:
-            continue
-        sv = str(v).strip()
-        if sv == "":
-            continue
-        cleaned[k] = sv
-    if not cleaned:
-        return "?"
-    return "?" + "&".join(f"{quote(str(k))}={quote(str(v))}" for k, v in cleaned.items())
-
-
-
-
-def sync_browser_url(**kwargs):
-    cleaned = {}
-    for k, v in kwargs.items():
-        if v is None:
-            continue
-        sv = str(v).strip()
-        if sv == "":
-            continue
-        cleaned[k] = sv
-
-    current = {}
-    for key in list(st.query_params.keys()):
-        val = st.query_params.get(key)
-        if isinstance(val, list):
-            current[key] = val[0] if val else ""
-        else:
-            current[key] = val
-
-    if current != cleaned:
-        st.query_params.clear()
-        for key, value in cleaned.items():
-            st.query_params[key] = value
 
 # 홈 카드 배경 이미지(Secrets)
 HOME_IMG1 = st.secrets.get("img1", "")
@@ -657,7 +605,6 @@ def build_embed_url_if_possible(url: str, page_range: str = "") -> str:
 # 렌더링 – 홈 / 월간 / 배우·장르 리스트 / 상세
 # ─────────────────────────────────────────────────────────────
 def render_home():
-    sync_browser_url(view="home")
     st.markdown(
         f'''
         <div style="display: flex; align-items: center; gap: 8px; margin-top: 30px; margin-bottom: 8px;">
@@ -671,42 +618,35 @@ def render_home():
     img1 = HOME_IMG1
     img2 = HOME_IMG2
 
-    monthly_link = make_app_link(view="monthly")
-    actor_link = make_app_link(view="actor_genre")
+    monthly_link = "?view=monthly"
+    actor_link = "?view=actor_genre"
 
     st.markdown(
         f"""
         <div class="home-grid">
-          <form class="link-form" action="" method="get">
-            <input type="hidden" name="view" value="monthly">
-            <button type="submit" class="link-button-reset home-card card-monthly" style="--bg:url('{img1}')">
-              <div class="home-card-tag">MONTHLY</div>
-              <div class="home-card-title">월간 드라마 인사이트 리포트</div>
-              <div class="home-card-desc">
-                드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, <br>
-                IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.
-              </div>
-            </button>
-          </form>
-          <form class="link-form" action="" method="get">
-            <input type="hidden" name="view" value="actor_genre">
-            <button type="submit" class="link-button-reset home-card card-actor" style="--bg:url('{img2}')">
-              <div class="home-card-tag">CAST / GENRE</div>
-              <div class="home-card-title">캐스팅 / 장르 분석 리포트</div>
-              <div class="home-card-desc">
-                마케팅 관점의 배우-캐스팅분석 및 장르분석 리포트입니다.
-              </div>
-            </button>
-          </form>
+          <a href="{monthly_link}" target="_self" class="home-card card-monthly" style="--bg:url('{img1}')">
+            <div class="home-card-tag">MONTHLY</div>
+            <div class="home-card-title">월간 드라마 인사이트 리포트</div>
+            <div class="home-card-desc">
+              드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, <br>
+              IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.
+            </div>
+          </a>
+          <a href="{actor_link}" target="_self" class="home-card card-actor" style="--bg:url('{img2}')">
+            <div class="home-card-tag">CAST / GENRE</div>
+            <div class="home-card-title">캐스팅 / 장르 분석 리포트</div>
+            <div class="home-card-desc">
+              마케팅 관점의 배우-캐스팅분석 및 장르분석 리포트입니다.
+            </div>
+          </a>
         </div>
         """, unsafe_allow_html=True
     )
 
 def render_monthly_list(df_monthly: pd.DataFrame):
-    st.markdown('<form class="link-form" action="" method="get"><input type="hidden" name="view" value="home"><button type="submit" class="link-button-reset detail-back">← 메인으로 돌아가기</button></form>', unsafe_allow_html=True)
+    st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">월간 드라마 인사이트 리포트</div>', unsafe_allow_html=True)
     st.markdown('<div class="detail-subtitle">드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.</div>', unsafe_allow_html=True)
-    sync_browser_url(view="monthly")
 
     if df_monthly.empty:
         st.info("등록된 월간 리포트가 없습니다. 시트를 확인해 주세요.")
@@ -727,7 +667,9 @@ def render_monthly_list(df_monthly: pd.DataFrame):
         else:
             thumb_url = "https://via.placeholder.com/640x360?text=Invalid+Link"
 
-        card_html = f'''<form class="link-form" action="" method="get"><input type="hidden" name="view" value="monthly_detail"><input type="hidden" name="id" value="{row["row_id"]}"><button type="submit" class="link-button-reset monthly-card"><div class="monthly-thumb-box"><img src="{thumb_url}" class="monthly-thumb" alt="{title}"></div><div class="monthly-info"><div class="monthly-title">{title}</div><div class="monthly-date">발행시점 : {date}</div></div></button></form>'''
+        link = f"?view=monthly_detail&id={row['row_id']}"
+        
+        card_html = f'<a href="{link}" target="_self" class="monthly-card"><div class="monthly-thumb-box"><img src="{thumb_url}" class="monthly-thumb" alt="{title}"></div><div class="monthly-info"><div class="monthly-title">{title}</div><div class="monthly-date">발행시점 : {date}</div></div></a>'
         cols_html.append(card_html)
         
     cols_html.append("</div>")
@@ -746,15 +688,13 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
     url = row["url"]
 
     # 헤더 텍스트가 왼쪽으로 치우치지 않게 뷰어와 동일한 컨테이너(viewer-wrapper)로 묶음
-    detail_link = make_app_link(view="monthly_detail", id=row_id)
     st.markdown(f'''
     <div class="viewer-wrapper">
-        <form class="link-form" action="" method="get"><input type="hidden" name="view" value="monthly"><button type="submit" class="link-button-reset detail-back">← 월간 리포트 목록으로</button></form>
+        <a href="?view=monthly" target="_self" class="detail-back">← 월간 리포트 목록으로</a>
         <div class="detail-title">{title}</div>
         <div class="detail-subtitle">발행시점 : {date}</div>
     </div>
     ''', unsafe_allow_html=True)
-    sync_browser_url(view="monthly_detail", id=row_id)
 
     file_id = extract_drive_file_id(url)
     rendered_native = False
@@ -888,15 +828,13 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
     cast_text = cast if cast else "배우 정보 없음"
     title_display = f"{cast_text} ({ip})"
 
-    detail_link = make_app_link(view="actor_detail", id=row_id)
     st.markdown(f'''
     <div class="viewer-wrapper">
-        <form class="link-form" action="" method="get"><input type="hidden" name="view" value="actor_genre"><button type="submit" class="link-button-reset detail-back">← 캐스팅/장르 분석 목록으로</button></form>
+        <a href="?view=actor_genre" target="_self" class="detail-back">← 캐스팅/장르 분석 목록으로</a>
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">캐스팅 분석 리포트<br>{meta}</div>
     </div>
     ''', unsafe_allow_html=True)
-    sync_browser_url(view="actor_detail", id=row_id)
 
     target_url = row.get("actor_url") or row.get("url")
     page_range = row.get("actor_range", "")
@@ -922,15 +860,13 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
     title_display = f"{title} ({ip})"
 
-    detail_link = make_app_link(view="genre_detail", id=row_id)
     st.markdown(f'''
     <div class="viewer-wrapper">
-        <form class="link-form" action="" method="get"><input type="hidden" name="view" value="actor_genre"><button type="submit" class="link-button-reset detail-back">← 캐스팅/장르 분석 목록으로</button></form>
+        <a href="?view=actor_genre" target="_self" class="detail-back">← 캐스팅/장르 분석 목록으로</a>
         <div class="detail-title">{title_display}</div>
         <div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>
     </div>
     ''', unsafe_allow_html=True)
-    sync_browser_url(view="genre_detail", id=row_id)
 
     target_url = row.get("genre_url") or row.get("url")
     page_range = row.get("genre_range", "")
@@ -940,9 +876,8 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 
 # ===== 캐스팅 / 장르 분석 리스트 렌더링 =====
 def render_actor_genre_list(df: pd.DataFrame):
-    st.markdown('<form class="link-form" action="" method="get"><input type="hidden" name="view" value="home"><button type="submit" class="link-button-reset detail-back">← 메인으로 돌아가기</button></form>', unsafe_allow_html=True)
+    st.markdown('<a href="?view=home" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">캐스팅 / 장르 분석 리포트</div>', unsafe_allow_html=True)
-    sync_browser_url(view="actor_genre")
 
     # ===== 데이터에서 존재하는 모든 배우명과 장르 키워드 추출 및 정렬 =====
     actor_list = df[df["actor_range"] != ""]["cast_clean"].str.split(r",\s*").explode().str.strip().dropna().unique().tolist()
@@ -998,6 +933,7 @@ def render_actor_genre_list(df: pd.DataFrame):
                 actor_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 캐스팅 분석 페이지가 없습니다.</div>')
             else:
                 for _, row in actor_df.iterrows():
+                    link = f"?view=actor_detail&id={row['row_id']}"
                     ip = row["ip"]
                     cast = row["cast_clean"] or row["cast"]
                     date = row["date"]
@@ -1009,15 +945,13 @@ def render_actor_genre_list(df: pd.DataFrame):
                     cast_text = cast if cast else "배우 정보 없음"
                     title_display = f"{cast_text} ({ip})"
 
+                    # 들여쓰기로 인한 코드블록 인식 오류를 막기 위해 한 줄 문자열 연결 방식 사용
                     actor_html.append(
-                        f'<form class="link-form" action="" method="get">'
-                        f'<input type="hidden" name="view" value="actor_detail">'
-                        f'<input type="hidden" name="id" value="{row["row_id"]}">'
-                        f'<button type="submit" class="link-button-reset analysis-card" style="margin-bottom: 12px;">'
+                        f'<a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">'
                         f'<div class="analysis-title-row"><div class="analysis-ip">{title_display}</div>'
                         f'<div class="analysis-label">캐스팅 분석</div></div>'
                         f'<div class="analysis-meta">{meta}</div>'
-                        f'<div class="analysis-sub">작품: {ip}</div></button></form>'
+                        f'<div class="analysis-sub">작품: {ip}</div></a>'
                     )
             actor_html.append('</div>')
             st.markdown("".join(actor_html), unsafe_allow_html=True)
@@ -1043,7 +977,9 @@ def render_actor_genre_list(df: pd.DataFrame):
 
             if genre_df.empty:
                 genre_html.append('<div style="padding: 16px; background-color: #ffffff; border-radius: 8px; border: 1px solid #eaeaea; color: #666; font-size: 14px;">조건에 맞는 장르 분석 페이지가 없습니다.</div>')
+            else:
                 for _, row in genre_df.iterrows():
+                    link = f"?view=genre_detail&id={row['row_id']}"
                     ip = row["ip"]
                     title = row["genre_title"] or "장르 분석"
                     date = row["date"]
@@ -1054,15 +990,13 @@ def render_actor_genre_list(df: pd.DataFrame):
                     meta = f"분석시점 : {date_str} / IP방영시점 : {air_str}"
                     title_display = f"{title} ({ip})"
 
+                    # 들여쓰기로 인한 코드블록 인식 오류를 막기 위해 한 줄 문자열 연결 방식 사용
                     genre_html.append(
-                        f'<form class="link-form" action="" method="get">'
-                        f'<input type="hidden" name="view" value="genre_detail">'
-                        f'<input type="hidden" name="id" value="{row["row_id"]}">'
-                        f'<button type="submit" class="link-button-reset analysis-card" style="margin-bottom: 12px;">'
+                        f'<a href="{link}" target="_self" class="analysis-card" style="margin-bottom: 12px;">'
                         f'<div class="analysis-title-row"><div class="analysis-ip">{title_display}</div>'
                         f'<div class="analysis-label">장르 분석</div></div>'
                         f'<div class="analysis-meta">{meta}</div>'
-                        f'<div class="analysis-sub">작품: {ip}</div></button></form>'
+                        f'<div class="analysis-sub">작품: {ip}</div></a>'
                     )
             genre_html.append('</div>')
             st.markdown("".join(genre_html), unsafe_allow_html=True)
