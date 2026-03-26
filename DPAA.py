@@ -7,7 +7,7 @@ from urllib.parse import urlparse, parse_qs, quote
 
 import pandas as pd
 import streamlit as st
-from streamlit.components.v1 import iframe as st_iframe
+from streamlit.components.v1 import iframe as st_iframe, html as st_html
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -395,16 +395,22 @@ def make_app_link(**kwargs) -> str:
     return "?" + "&".join(f"{quote(str(k))}={quote(str(v))}" for k, v in cleaned.items())
 
 
-def render_share_link(link: str, label: str = "이 페이지 바로가기"):
-    full_link = link
-    st.markdown(
+
+
+def sync_browser_url(**kwargs):
+    target = make_app_link(**kwargs)
+    safe_target = json.dumps(target)
+    st_html(
         f"""
-        <div class="viewer-wrapper" style="margin-top:8px; margin-bottom:12px;">
-            <div style="font-size:13px; color:#666; margin-bottom:6px;">🔗 {label}</div>
-            <div style="padding:10px 14px; border:1px solid #eaeaea; border-radius:10px; background:#fafafa; font-size:13px; word-break:break-all;">{full_link}</div>
-        </div>
+        <script>
+        const target = {safe_target};
+        const current = window.parent.location.search || '?';
+        if (current !== target) {{
+            window.parent.history.replaceState({{}}, '', target);
+        }}
+        </script>
         """,
-        unsafe_allow_html=True,
+        height=0,
     )
 
 # 홈 카드 배경 이미지(Secrets)
@@ -632,6 +638,7 @@ def build_embed_url_if_possible(url: str, page_range: str = "") -> str:
 # 렌더링 – 홈 / 월간 / 배우·장르 리스트 / 상세
 # ─────────────────────────────────────────────────────────────
 def render_home():
+    sync_browser_url(view="home")
     st.markdown(
         f'''
         <div style="display: flex; align-items: center; gap: 8px; margin-top: 30px; margin-bottom: 8px;">
@@ -674,7 +681,7 @@ def render_monthly_list(df_monthly: pd.DataFrame):
     st.markdown(f'<a href="{make_app_link(view="home")}" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">월간 드라마 인사이트 리포트</div>', unsafe_allow_html=True)
     st.markdown('<div class="detail-subtitle">드라마 시장에 대한 온라인 반응 및 지표 데이터를 분석하여, IP 마케팅 및 콘텐츠 기획 단계에서 적용할 수 있는 다양한 관점의 인사이트를 제공합니다.</div>', unsafe_allow_html=True)
-    render_share_link(make_app_link(view="monthly"), "월간 리포트 메인 페이지 링크")
+    sync_browser_url(view="monthly")
 
     if df_monthly.empty:
         st.info("등록된 월간 리포트가 없습니다. 시트를 확인해 주세요.")
@@ -724,7 +731,7 @@ def render_monthly_detail(df_monthly: pd.DataFrame, row_id: str):
         <div class="detail-subtitle">발행시점 : {date}</div>
     </div>
     ''', unsafe_allow_html=True)
-    render_share_link(detail_link, "이 월간 리포트 바로가기 링크")
+    sync_browser_url(view="monthly_detail", id=row_id)
 
     file_id = extract_drive_file_id(url)
     rendered_native = False
@@ -866,7 +873,7 @@ def render_actor_detail(df: pd.DataFrame, row_id: str):
         <div class="detail-subtitle">캐스팅 분석 리포트<br>{meta}</div>
     </div>
     ''', unsafe_allow_html=True)
-    render_share_link(detail_link, "이 캐스팅 분석 리포트 바로가기 링크")
+    sync_browser_url(view="actor_detail", id=row_id)
 
     target_url = row.get("actor_url") or row.get("url")
     page_range = row.get("actor_range", "")
@@ -900,7 +907,7 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
         <div class="detail-subtitle">장르 분석 리포트<br>{meta}</div>
     </div>
     ''', unsafe_allow_html=True)
-    render_share_link(detail_link, "이 장르 분석 리포트 바로가기 링크")
+    sync_browser_url(view="genre_detail", id=row_id)
 
     target_url = row.get("genre_url") or row.get("url")
     page_range = row.get("genre_range", "")
@@ -912,7 +919,7 @@ def render_genre_detail(df: pd.DataFrame, row_id: str):
 def render_actor_genre_list(df: pd.DataFrame):
     st.markdown(f'<a href="{make_app_link(view="home")}" target="_self" class="detail-back">← 메인으로 돌아가기</a>', unsafe_allow_html=True)
     st.markdown('<div class="detail-title">캐스팅 / 장르 분석 리포트</div>', unsafe_allow_html=True)
-    render_share_link(make_app_link(view="actor_genre"), "캐스팅 / 장르 분석 메인 페이지 링크")
+    sync_browser_url(view="actor_genre")
 
     # ===== 데이터에서 존재하는 모든 배우명과 장르 키워드 추출 및 정렬 =====
     actor_list = df[df["actor_range"] != ""]["cast_clean"].str.split(r",\s*").explode().str.strip().dropna().unique().tolist()
